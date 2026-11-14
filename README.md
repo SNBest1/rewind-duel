@@ -2,7 +2,7 @@
 
 Rewind lets you jump back into any moment of a round you lost in **Rewind Duel**, a small top-down 1v1 tactical shooter, and replay it against a clone of your real opponent built from their own recorded games. Built for DevHacks 2026 (Riot Games Track 1, Gameplay Bots).
 
-**Status:** Phase 1 (playable two-player game with recording and replay) is done. Rewind sessions, clones, what-if plans and evals are next. See `spec.md` for the full plan and `DECISIONS.md` for design choices.
+**Status:** Phases 1–5 are done — the playable two-player game with recording and replay, rewind sessions (ghost → clone handoff with a behavior trace), k-nearest-neighbor clones with a circuit breaker, the what-if plan ranker, and the evidence evals. Phase 6 (first-person three.js view) is stretch and not built. See `spec.md` for the full plan and `DECISIONS.md` for design choices.
 
 ## Architecture
 
@@ -118,9 +118,36 @@ npm run typecheck
 
 `check:determinism` fails if `Math.random` or `Date.now` appears anywhere in `engine/`.
 
-## Run a rewind / run the evals
+## Run a rewind
 
-Not built yet (Phases 2 to 5).
+Build the client and start the server (the replay viewer is served from the same port):
+
+```bash
+npm run build
+```
+
+```bash
+npm run server
+```
+
+Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timeline (kills, plants and round starts are marked), and toggle each player's vision. Then:
+
+- **Take control from here** opens a rewind session on the server. You drive your own slot; the opponent first replays its recorded inputs (ghost), and once your play diverges past the limit it hands off to a clone of the real opponent built from their other games. The circuit breaker drops to a basic bot when the clone hits a situation it has never seen. The behavior-trace panel logs every opponent decision; clicking a `CLONE` line shows the recorded moment(s) it copied.
+- **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, …) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
+
+## Run the evals
+
+```bash
+npm run eval
+```
+
+Writes `eval/results.md`. For each player with enough data it holds out one of their matches, builds their clone from the rest, and on the held-out match reports clone accuracy (move + fire match vs the real person), 1-second position error, handoff rate, and a transfer test — each for three policies: the player's own clone, the basic bot, and a clone of a different player. Numbers are reported as-is, including weak ones.
+
+You can also run one what-if from the command line:
+
+```bash
+npm run whatif -- data/<id>.json <human 0|1> <forkTick>
+```
 
 ## Environment
 

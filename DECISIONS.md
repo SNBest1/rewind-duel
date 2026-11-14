@@ -172,3 +172,16 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** `runWhatIf` builds the clone, then evaluates the plans in a `worker_thread` (`rewind/whatif-worker.ts`, `rewind/whatif-run.ts`). A `GuardedClone` cannot cross the thread boundary, so the worker is handed the raw samples plus the breaker limit and rebuilds it. If the worker cannot start, it runs inline and reports `ranInWorker: false`.
 - **Why:** the spec requires it off the live loop so a what-if (tens of thousands of ticks) never stalls a rewind session on the same server. The inline fallback means a demo never silently fails if the worker loader is unavailable.
 - **Tradeoff:** passing the full sample set into the worker is a copy of a few thousand vectors per request. Acceptable for an on-demand action; a long-lived pool would avoid it if this were hot.
+
+## Phase 5 (evidence)
+
+### D29. Every metric is measured on held-out matches, and weak numbers are reported
+- **Chose:** `npm run eval` holds out one match per player, builds the clone from the rest, and reports clone accuracy, 1-second position error, handoff rate and a transfer test on the held-out match for three policies: the player's own clone, the basic bot, and a clone of a different player (`eval/run.ts`, `eval/metrics.ts`). Results go to `eval/results.md` as-is.
+- **Why:** the judge grades on evidence against a simpler baseline. Measuring on training data would be meaningless; the three-policy comparison is what shows the own clone is actually capturing the person, not just producing plausible inputs. The spec explicitly says report real numbers even if weak.
+- **What the numbers say (small dataset):** the bot clones reproduce their own player's move+fire choice 77–84% of the time vs 31% for the basic bot and ~43% for a cross-player clone, and land 1.1 units from the real path vs ~2.7 for the bot. The human (Nipun) clone is much weaker (23% both-match) — reported honestly; human play is noisier and the dataset is tiny.
+- **Tradeoff:** fire-choice accuracy is inflated by the common "not firing" case, so move and fire are shown separately and "both" (the spec's measure) is the headline. Position error freezes the opponent so it measures the player's own path, not a diverging fight.
+
+### D30. Position error freezes the opponent; the transfer test reconstructs "first / retries / fresh" from recordings
+- **Chose:** `positionError` runs the policy and the real inputs from the same start with the opponent held still, so the only difference is this player's own decisions (`eval/metrics.ts`). `transferCase` finds a round the player lost, forks ~3 s before it ended, and reports the recorded loss (first attempt), the player's own clone vs the opponent clone over N seeds (retries), and the best what-if plan (fresh attempt) (`eval/transfer.ts`).
+- **Why:** a fair position metric must isolate one player's movement from the fight's chaos. The transfer test maps the spec's "first attempt / retries / fresh attempt" onto what the recordings can actually support without new play sessions.
+- **Tradeoff:** freezing the opponent makes position error ignore how the real fight pushed the player around. The transfer "fresh attempt" is only as good as the scripted plan menu (D26), and at forks where no enemy is visible it shows survive-100%/win-0%.
