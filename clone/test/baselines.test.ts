@@ -12,6 +12,7 @@ function skewedSamples(): Sample[] {
     features: Array.from({ length: FEATURE_DIM }, () => 0),
     action: { move, walk: false, aimBucket: 2, fire: false, smoke: false, dash: false, use: false },
     actionId: id,
+    enemyVisible: false,
     ref: { matchId: 'm', tick: id, playerName: 'p', weight: 0 },
   });
   const out: Sample[] = [];

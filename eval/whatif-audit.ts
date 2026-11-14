@@ -10,10 +10,13 @@
 //     least once over a short rollout; a clone that never shoots would make every plan look safe.
 import {
   canSee, observe, replayMatch, step,
-  type Input, type MatchFile, type Observation, type Slot, type State,
+  type Input, type MatchFile, type Observation, type Policy, type Slot, type State,
 } from '@rewind/engine';
-import { buildClone, matchesOf, type BuiltClone } from '@rewind/clone';
-import { PLANS, evaluatePlans, timelineMarkers } from '@rewind/rewind';
+import { BasicBot, buildClone, matchesOf, type BuiltClone } from '@rewind/clone';
+import { PLANS, evaluatePlans, timelineMarkers, type Plan } from '@rewind/rewind';
+
+/** A policy that may expose reset() (the clones and the bot do). */
+type ResettablePolicy = Policy & { reset?(): void };
 
 export type AuditResult = {
   humanFogOk: boolean;
@@ -118,34 +121,41 @@ export function auditWhatIf(file: MatchFile, allMatches: MatchFile[]): AuditResu
   return { humanFogOk, cloneFogOk, cloneFiresBack, details };
 }
 
+export type ForkRow = {
+  matchId: string; forkTick: number;
+  // vs the fixed (factored) clone
+  bestPlan: string; win: number; survive: number; cloneSawTicks: number; cloneFireTicks: number;
+  // vs the basic bot reference opponent (same fork, same plans)
+  botBestPlan: string; botWin: number; botSurvive: number; botSawTicks: number; botFireTicks: number;
+};
+
 export type ForkSpread = {
   forks: number;
-  topWinRates: number[];
-  topSurviveRates: number[];
-  summary: { bestPlanWin: { min: number; median: number; max: number }; bestPlanSurvive: { min: number; median: number; max: number } };
-  perFork: { matchId: string; forkTick: number; bestPlan: string; win: number; survive: number; cloneSawTicks: number; cloneFireTicks: number }[];
-  cloneFireWhenSeen: number; // across all forks: share of sightline-ticks where the clone chose to fire
+  summary: {
+    cloneWin: { min: number; median: number; max: number };
+    cloneSurvive: { min: number; median: number; max: number };
+    botWin: { min: number; median: number; max: number };
+    botSurvive: { min: number; median: number; max: number };
+  };
+  perFork: ForkRow[];
+  cloneFireWhenSeen: number; // across all forks vs the clone: share of sightline-ticks it chose to fire
+  botFireWhenSeen: number; // same, vs the basic bot (reference)
 };
 
 /**
- * Rolls the best plan forward once against the clone and counts, over the rollout, how many ticks the clone
- * could see the human and how many it chose to fire. This is the honest check on whether a "win" is real:
- * a clone that sees the human but never shoots makes every plan look safe.
+ * Rolls the best plan forward once against an opponent policy and counts, over the rollout, how many ticks
+ * the opponent could see the human and how many it chose to fire. This is the honest check on whether a
+ * "win" is real: an opponent that sees the human but never shoots makes every plan look safe.
  */
-function cloneFireAudit(fork: State, human: Slot, oppBuilt: BuiltClone): { saw: number; fired: number } {
+function opponentFireAudit(fork: State, human: Slot, opponentPolicy: ResettablePolicy, plan: Plan): { saw: number; fired: number } {
   const opponent = (1 - human) as Slot;
-  oppBuilt.guarded.reset();
-  const ranked = evaluatePlans(fork, human, oppBuilt.guarded);
-  const best = ranked[0];
-  if (!best) return { saw: 0, fired: 0 };
-  const plan = PLANS.find((p) => p.label === best.label)!;
-  oppBuilt.guarded.reset();
+  opponentPolicy.reset?.();
   let s: State = JSON.parse(JSON.stringify(fork));
   let saw = 0, fired = 0;
   for (let t = 0; t < 96 && s.phase === 'live'; t++) {
     const oObs = observe(s, opponent);
     if (oObs.enemy) saw++;
-    const oInput = oppBuilt.guarded.act(oObs).input;
+    const oInput = opponentPolicy.act(oObs).input;
     if (oInput.fire) fired++;
     const inputs: [Input, Input] = [
       { move: { x: 0, y: 0 }, walk: false, aim: 0, fire: false, reload: false, smoke: false, dash: false, use: false },
@@ -210,31 +220,51 @@ export function forkSpread(humanMatches: MatchFile[], allMatches: MatchFile[], m
     ? candidates
     : Array.from({ length: take }, (_, i) => candidates[Math.floor((i * candidates.length) / take)]);
 
-  let totalSaw = 0, totalFired = 0;
+  const bot = new BasicBot(); // the reference opponent: the hand-written bot, same forks and plans
+  let cloneSaw = 0, cloneFired = 0, botSaw = 0, botFired = 0;
+
   for (const c of chosen) {
     const fork = replayMatch(c.file, c.forkTick);
     if (fork.phase !== 'live') continue;
+
+    // vs the fixed (factored) clone with the breaker on.
     c.opp.guarded.reset();
-    const ranked = evaluatePlans(fork, human, c.opp.guarded);
-    const best = ranked[0];
-    if (!best) continue;
-    const fire = cloneFireAudit(fork, human, c.opp);
-    totalSaw += fire.saw;
-    totalFired += fire.fired;
-    perFork.push({ matchId: c.file.id, forkTick: c.forkTick, bestPlan: best.label, win: best.winRate, survive: best.survivalRate, cloneSawTicks: fire.saw, cloneFireTicks: fire.fired });
+    const rankedClone = evaluatePlans(fork, human, c.opp.guarded);
+    const bestClone = rankedClone[0];
+    if (!bestClone) continue;
+    const cPlan = PLANS.find((p) => p.label === bestClone.label)!;
+    const cFire = opponentFireAudit(fork, human, c.opp.guarded, cPlan);
+    cloneSaw += cFire.saw; cloneFired += cFire.fired;
+
+    // vs the basic bot reference opponent (same fork, same plan menu).
+    bot.reset();
+    const rankedBot = evaluatePlans(fork, human, bot);
+    const bestBot = rankedBot[0]!;
+    const bPlan = PLANS.find((p) => p.label === bestBot.label)!;
+    const bFire = opponentFireAudit(fork, human, bot, bPlan);
+    botSaw += bFire.saw; botFired += bFire.fired;
+
+    perFork.push({
+      matchId: c.file.id, forkTick: c.forkTick,
+      bestPlan: bestClone.label, win: bestClone.winRate, survive: bestClone.survivalRate, cloneSawTicks: cFire.saw, cloneFireTicks: cFire.fired,
+      botBestPlan: bestBot.label, botWin: bestBot.winRate, botSurvive: bestBot.survivalRate, botSawTicks: bFire.saw, botFireTicks: bFire.fired,
+    });
   }
 
-  const wins = perFork.map((p) => p.win);
-  const survs = perFork.map((p) => p.survive);
+  const col = (f: (r: ForkRow) => number) => {
+    const xs = perFork.map(f);
+    return { min: Math.min(...xs, 0), median: median(xs), max: Math.max(...xs, 0) };
+  };
   return {
     forks: perFork.length,
-    topWinRates: wins,
-    topSurviveRates: survs,
     summary: {
-      bestPlanWin: { min: Math.min(...wins, 0), median: median(wins), max: Math.max(...wins, 0) },
-      bestPlanSurvive: { min: Math.min(...survs, 0), median: median(survs), max: Math.max(...survs, 0) },
+      cloneWin: col((r) => r.win),
+      cloneSurvive: col((r) => r.survive),
+      botWin: col((r) => r.botWin),
+      botSurvive: col((r) => r.botSurvive),
     },
     perFork,
-    cloneFireWhenSeen: totalSaw > 0 ? totalFired / totalSaw : 0,
+    cloneFireWhenSeen: cloneSaw > 0 ? cloneFired / cloneSaw : 0,
+    botFireWhenSeen: botSaw > 0 ? botFired / botSaw : 0,
   };
 }

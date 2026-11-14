@@ -3,9 +3,25 @@
 // draws snapshots and the human's own live Observation; it never simulates.
 import { readFileSync, readdirSync } from 'node:fs';
 import type { Input, MatchFile, Slot } from '@rewind/engine';
-import { buildClone, loadMatches, matchesOf } from '@rewind/clone';
+import { buildClone, isBotName, isSelfMatch, loadMatches, matchesOf } from '@rewind/clone';
 import { RewindSession, buildSnapshots, timelineMarkers } from '@rewind/rewind';
 import { sanitizeInput } from './match';
+
+/** Live roster: matches per player, computed fresh from data/ on each call so the page can poll it. */
+export function rosterData(dir: string): { generatedAt: string; players: { name: string; kind: 'human' | 'bot'; matches: number; selfExcluded: number; status: string }[] } {
+  const all = loadMatches(dir);
+  const names = new Set<string>();
+  for (const m of all) for (const p of m.players) names.add(p.name);
+  const players = [...names].map((name) => {
+    const mine = matchesOf(all, name);
+    const real = mine.filter((m) => !isSelfMatch(m)).length;
+    const selfExcluded = mine.length - real;
+    const status = real >= 3 ? 'ok' : real === 2 ? 'testable, needs more' : 'cannot test yet — needs 1+ more';
+    return { name, kind: (isBotName(name) ? 'bot' : 'human') as 'human' | 'bot', matches: real, selfExcluded, status };
+  });
+  players.sort((a, b) => b.matches - a.matches || a.name.localeCompare(b.name));
+  return { generatedAt: new Date().toISOString(), players };
+}
 
 /** A one-line summary of each recorded match, for the replay viewer's match list. */
 export function matchList(dir: string): { id: string; players: string[]; ticks: number }[] {

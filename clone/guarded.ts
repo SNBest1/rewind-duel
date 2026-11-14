@@ -3,10 +3,17 @@
 // BREAKER line is written. Otherwise the clone acts and a CLONE line cites the neighbors it copied.
 import { describeAction, type Input, type Observation, type Policy, type Slot, type TraceEvent, type TraceRef } from '@rewind/engine';
 import { BasicBot } from './bot';
-import { KnnClone } from './knn';
 
 /** Where a GuardedClone writes its trace. The server and eval pass a sink; a lone clone can ignore it. */
 export type TraceSink = (e: TraceEvent) => void;
+
+/** Any clone the breaker can wrap: the joint KnnClone or the FactoredClone both satisfy this. */
+export interface InnerClone {
+  readonly name: string;
+  nnDistance(obs: Observation): number;
+  act(obs: Observation): { input: Input; confidence: number; because: TraceRef[] };
+  reset(): void;
+}
 
 export class GuardedClone implements Policy {
   readonly name: string;
@@ -15,11 +22,11 @@ export class GuardedClone implements Policy {
   private sink: TraceSink | null = null;
 
   /**
-   * @param clone the player's KNN clone
+   * @param clone the player's clone (joint KNN or factored)
    * @param breakerLimit the nearest-neighbor distance above which the bot takes over
    *        (the 95th percentile of held-out nearest-neighbor distances; see build.ts)
    */
-  constructor(private readonly clone: KnnClone, readonly breakerLimit: number) {
+  constructor(private readonly clone: InnerClone, readonly breakerLimit: number) {
     this.name = `${clone.name}-guarded`;
   }
 
@@ -30,21 +37,21 @@ export class GuardedClone implements Policy {
   }
 
   act(obs: Observation): { input: Input; confidence: number; because: TraceRef[] } {
-    const n = this.clone.neighborhood(obs);
-    if (n.nnDist > this.breakerLimit) {
+    const nnDist = this.clone.nnDistance(obs);
+    if (nnDist > this.breakerLimit) {
       const r = this.bot.act(obs);
       this.sink?.({
         kind: 'BREAKER', tick: obs.tick, actor: this.actor,
-        nnDist: n.nnDist, limit: this.breakerLimit,
-        reason: `nearest recorded moment ${n.nnDist.toFixed(2)} > limit ${this.breakerLimit.toFixed(2)}; using ${this.bot.name}`,
+        nnDist, limit: this.breakerLimit,
+        reason: `nearest recorded moment ${nnDist.toFixed(2)} > limit ${this.breakerLimit.toFixed(2)}; using ${this.bot.name}`,
       });
       return r;
     }
-    // Within range: copy the clone. Keep its prevAction in step by calling act (it returns the same vote).
+    // Within range: copy the clone.
     const r = this.clone.act(obs);
     this.sink?.({
       kind: 'CLONE', tick: obs.tick, actor: this.actor,
-      nnDist: n.nnDist, confidence: r.confidence, because: r.because,
+      nnDist, confidence: r.confidence, because: r.because,
       action: describeAction(r.input),
     });
     return r;
@@ -52,7 +59,7 @@ export class GuardedClone implements Policy {
 
   /** True when the breaker would fire for this observation. Lets eval measure the handoff rate without acting. */
   wouldBreak(obs: Observation): boolean {
-    return this.clone.neighborhood(obs).nnDist > this.breakerLimit;
+    return this.clone.nnDistance(obs) > this.breakerLimit;
   }
 
   /** Forgets all carried state (clone prevAction, bot route), so the next decision is independent. */

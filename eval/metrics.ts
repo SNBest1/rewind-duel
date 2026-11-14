@@ -5,7 +5,7 @@ import {
   IDLE, createMatch, observe, step,
   type Input, type MatchFile, type Observation, type Policy, type Slot, type State,
 } from '@rewind/engine';
-import { DECISION_INTERVAL, GuardedClone } from '@rewind/clone';
+import { DECISION_INTERVAL, GuardedClone, MOVE_OPTIONS } from '@rewind/clone';
 
 /** Steps a held-out match, calling `visit` on every live decision tick for the given slot. */
 function walkDecisions(file: MatchFile, slot: Slot, visit: (s: State, recorded: Input) => void): void {
@@ -24,14 +24,41 @@ function walkDecisions(file: MatchFile, slot: Slot, visit: (s: State, recorded: 
   }
 }
 
-export type AccuracyResult = { decisions: number; moveMatch: number; fireMatch: number; bothMatch: number };
+export type AccuracyResult = {
+  decisions: number;
+  // RAW metrics (kept for comparison; locked in METRICS.md).
+  moveMatch: number; // count of ticks the move direction matched
+  fireMatch: number; // count of ticks the fire choice matched
+  bothMatch: number;
+  // NEW metrics (locked in METRICS.md).
+  balancedMoveAcc: number; // mean over the 9 move classes of (correct in class / real occurrences of class)
+  fireVisible: { precision: number; recall: number; tp: number; fp: number; fn: number; ticks: number }; // fire, only on visible-enemy ticks
+};
+
+/** The index 0..8 of a move direction in the 9-option space (stop + 8 dirs). */
+function moveClass(mx: number, my: number): number {
+  const opts = MOVE_OPTIONS;
+  for (let i = 0; i < opts.length; i++) if (opts[i].x === mx && opts[i].y === my) return i;
+  return 0;
+}
 
 /**
- * Share of decisions where the policy's move direction AND fire choice match the real person.
- * The policy sees only the slot's Observation, so this is a fair "does it decide like them" measure.
+ * Raw and new accuracy together, so they sit side by side.
+ *  - raw move/fire/both match: plain agreement counts.
+ *  - balanced move accuracy: mean per-class recall over the 9 move options, so standing still (the
+ *    common class) cannot dominate. A policy that always picks the majority move scores ~1/9 here.
+ *  - fire precision/recall on VISIBLE-enemy ticks: of the ticks the enemy was in sight, how often the
+ *    policy fired when the person did (recall) and how often its fires matched a real fire (precision).
+ *    Fire off visible ticks is almost always "no", which is why it is measured only where it is a choice.
  */
 export function cloneAccuracy(file: MatchFile, slot: Slot, policy: Policy): AccuracyResult {
   let decisions = 0, moveMatch = 0, fireMatch = 0, bothMatch = 0;
+  // Per-move-class counts for balanced accuracy.
+  const classTotal = new Array(MOVE_OPTIONS.length).fill(0);
+  const classHit = new Array(MOVE_OPTIONS.length).fill(0);
+  // Fire confusion on visible-enemy ticks.
+  let visTicks = 0, tp = 0, fp = 0, fn = 0;
+
   walkDecisions(file, slot, (s, recorded) => {
     const o: Observation = observe(s, slot);
     const chosen = policy.act(o).input;
@@ -41,37 +68,87 @@ export function cloneAccuracy(file: MatchFile, slot: Slot, policy: Policy): Accu
     if (sameMove) moveMatch++;
     if (sameFire) fireMatch++;
     if (sameMove && sameFire) bothMatch++;
+
+    const cls = moveClass(recorded.move.x, recorded.move.y);
+    classTotal[cls]++;
+    if (sameMove) classHit[cls]++;
+
+    if (o.enemy) {
+      visTicks++;
+      const real = recorded.fire, pred = chosen.fire;
+      if (real && pred) tp++;
+      else if (!real && pred) fp++;
+      else if (real && !pred) fn++;
+    }
   });
-  return { decisions, moveMatch, fireMatch, bothMatch };
+
+  // Balanced move accuracy: average recall over classes that actually occurred.
+  let recallSum = 0, classesSeen = 0;
+  for (let c = 0; c < MOVE_OPTIONS.length; c++) {
+    if (classTotal[c] > 0) { recallSum += classHit[c] / classTotal[c]; classesSeen++; }
+  }
+  const balancedMoveAcc = classesSeen ? recallSum / classesSeen : 0;
+
+  const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+  const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+
+  return {
+    decisions, moveMatch, fireMatch, bothMatch,
+    balancedMoveAcc,
+    fireVisible: { precision, recall, tp, fp, fn, ticks: visTicks },
+  };
 }
 
-export type PositionResult = { starts: number; avgError: number; medianError: number };
+export type PositionResult = {
+  starts: number;
+  avgError: number; // RAW: over all held-out moments
+  medianError: number;
+  movedStarts: number; // NEW: moments where the person actually moved in the next second
+  avgErrorMoved: number; // NEW: position error over only those moved moments
+  medianErrorMoved: number;
+};
 
 /**
  * Position error: from each held-out decision moment, run the policy for 1 second and measure how far it
  * ends from where the real person actually ended. Both the policy and the "truth" run in the engine, so
  * the only difference is the inputs. The opponent is frozen (held still) so the comparison is about this
  * player's own movement, not a diverging fight.
+ *
+ * RAW = over all moments. NEW = over only moments where the person actually MOVED (ended > `movedEps`
+ * units from where they started). On a mostly-still player the raw number is flattered by all the "did not
+ * move, trivially 0 error" moments; the moved-only number is the honest test of copying real movement.
  */
-export function positionError(file: MatchFile, slot: Slot, policy: Policy, horizonTicks = 32): PositionResult {
+export function positionError(file: MatchFile, slot: Slot, policy: Policy, horizonTicks = 32, movedEps = 0.5): PositionResult {
   const other = (1 - slot) as Slot;
   const errors: number[] = [];
+  const movedErrors: number[] = [];
 
   // Precompute the real per-tick inputs for this slot, so "truth" replays exactly what they did.
   const realInputs = recordedInputMap(file, slot);
 
   walkDecisions(file, slot, (s) => {
+    const start = { x: s.players[slot].x, y: s.players[slot].y };
     // Truth: run the real inputs for 1 second from here.
     const truth = runFrom(s, slot, other, horizonTicks, (tick) => realInputs.get(tick) ?? lastInputBefore(realInputs, tick));
     // Policy: run the policy's choices for 1 second from the same start.
     const pol = runFrom(s, slot, other, horizonTicks, null, policy);
-    errors.push(Math.hypot(pol.x - truth.x, pol.y - truth.y));
+    const err = Math.hypot(pol.x - truth.x, pol.y - truth.y);
+    errors.push(err);
+    // Did the real person move meaningfully this second?
+    if (Math.hypot(truth.x - start.x, truth.y - start.y) > movedEps) movedErrors.push(err);
   });
 
-  errors.sort((a, b) => a - b);
-  const avg = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 0;
-  const median = errors.length ? errors[Math.floor(errors.length / 2)] : 0;
-  return { starts: errors.length, avgError: avg, medianError: median };
+  const stat = (xs: number[]) => {
+    if (!xs.length) return { avg: 0, median: 0 };
+    const sorted = [...xs].sort((a, b) => a - b);
+    return { avg: xs.reduce((a, b) => a + b, 0) / xs.length, median: sorted[Math.floor(sorted.length / 2)] };
+  };
+  const all = stat(errors);
+  const moved = stat(movedErrors);
+  return {
+    starts: errors.length, avgError: all.avg, medianError: all.median,
+    movedStarts: movedErrors.length, avgErrorMoved: moved.avg, medianErrorMoved: moved.median,
+  };
 }
 
 /** Runs `horizon` ticks from a start state, driving `slot` either from a recorded-input getter or a policy,

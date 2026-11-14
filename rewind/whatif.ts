@@ -3,9 +3,8 @@
 // wins the fight. The top plans come back with a one-line reason built from the events that actually happened.
 import {
   IDLE, observe, replayMatch, step,
-  type GameEvent, type Input, type MatchFile, type Slot, type State,
+  type GameEvent, type Input, type MatchFile, type Policy, type Slot, type State,
 } from '@rewind/engine';
-import { GuardedClone } from '@rewind/clone';
 import { PLANS, type Plan } from './plans';
 
 const SIM_TICKS = 96; // 3 seconds at 32 ticks/s
@@ -36,7 +35,7 @@ function reseed(s: State, seed: number): State {
 }
 
 /** Runs one plan once from the fork state under a seed, returns what happened to the human. */
-function simulateOnce(fork: State, human: Slot, plan: Plan, clone: GuardedClone, seed: number): { result: RunResult; events: GameEvent[] } {
+function simulateOnce(fork: State, human: Slot, plan: Plan, clone: Policy, seed: number): { result: RunResult; events: GameEvent[] } {
   const opponent = (1 - human) as Slot;
   let s = reseed(fork, seed);
   let shotsLanded = 0;
@@ -88,7 +87,7 @@ function reasonFor(plan: Plan, runs: RunResult[]): string {
  * Score = winRate (dominant) + 0.3 * survivalRate + small bonus for shots landed, so a plan that
  * wins the fight outranks one that merely survives.
  */
-export function evaluatePlans(fork: State, human: Slot, clone: GuardedClone, plans: Plan[] = PLANS): PlanResult[] {
+export function evaluatePlans(fork: State, human: Slot, clone: Policy, plans: Plan[] = PLANS): PlanResult[] {
   const results: PlanResult[] = [];
   for (const plan of plans) {
     const runs: RunResult[] = [];
@@ -108,7 +107,7 @@ export function evaluatePlans(fork: State, human: Slot, clone: GuardedClone, pla
 }
 
 /** Builds the opponent clone, forks the match, and returns the top-N plans. Used by the CLI and the worker. */
-export function whatIf(file: MatchFile, human: Slot, forkTick: number, clone: GuardedClone, topN = 3): PlanResult[] {
+export function whatIf(file: MatchFile, human: Slot, forkTick: number, clone: Policy, topN = 3): PlanResult[] {
   const fork = replayMatch(file, forkTick);
   return evaluatePlans(fork, human, clone).slice(0, topN);
 }

@@ -29,6 +29,7 @@ function chaseClone(opponent: Slot): GuardedClone {
     features: Array.from({ length: FEATURE_DIM }, () => 0),
     action: { move: 1, walk: false, aimBucket: 2, fire: true, smoke: false, dash: false, use: false },
     actionId: 0,
+    enemyVisible: true,
     ref: { matchId: 'synthetic', tick: i, playerName: 'synthetic', weight: 0 },
   }));
   return new GuardedClone(new KnnClone('synthetic', samples), 1e9);

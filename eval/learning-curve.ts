@@ -6,7 +6,7 @@ import type { MatchFile, Slot } from '@rewind/engine';
 import { buildClone, matchesOf, slotOf } from '@rewind/clone';
 import { cloneAccuracy } from './metrics';
 
-export type CurvePoint = { trainMatches: number; bothAcc: number; moveAcc: number; fireAcc: number; decisions: number };
+export type CurvePoint = { trainMatches: number; bothAcc: number; moveAcc: number; fireAcc: number; balancedMove: number; fireRecall: number; decisions: number };
 export type PlayerCurve = { player: string; isBot: boolean; heldOut: string; points: CurvePoint[] };
 
 /**
@@ -26,13 +26,15 @@ export function playerCurve(playerName: string, allMatches: MatchFile[], isBot: 
   for (let k = 1; k <= trainPool.length; k++) {
     const trainIds = trainPool.slice(0, k).map((m) => m.id);
     const built = buildClone(playerName, { allMatches, trainOnly: trainIds });
-    const acc = cloneAccuracy(heldOut, slot, built.guarded);
+    const acc = cloneAccuracy(heldOut, slot, built.guardedFactored);
     const d = Math.max(1, acc.decisions);
     points.push({
       trainMatches: k,
       bothAcc: acc.bothMatch / d,
       moveAcc: acc.moveMatch / d,
       fireAcc: acc.fireMatch / d,
+      balancedMove: acc.balancedMoveAcc,
+      fireRecall: acc.fireVisible.recall,
       decisions: acc.decisions,
     });
   }
@@ -44,7 +46,7 @@ export function playerCurve(playerName: string, allMatches: MatchFile[], isBot: 
  * Move match is the discriminating signal (fire is dominated by "not firing", so it inflates a combined
  * score). Self-contained SVG so it drops straight into a slide or video frame. Returns the SVG string.
  */
-export function curveChartSvg(curves: PlayerCurve[], title = 'Clone move-match accuracy vs training matches'): string {
+export function curveChartSvg(curves: PlayerCurve[], title = 'Clone balanced move accuracy vs training matches'): string {
   const W = 720, H = 420, padL = 60, padR = 170, padT = 50, padB = 50;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const maxX = Math.max(1, ...curves.flatMap((c) => c.points.map((p) => p.trainMatches)));
@@ -68,17 +70,17 @@ export function curveChartSvg(curves: PlayerCurve[], title = 'Clone move-match a
     parts.push(`<text x="${x(n)}" y="${padT + plotH + 20}" fill="#9c8a78" font-size="11" text-anchor="middle">${n}</text>`);
   }
   parts.push(`<text x="${padL + plotW / 2}" y="${H - 10}" fill="#9c8a78" font-size="12" text-anchor="middle">training matches</text>`);
-  parts.push(`<text transform="translate(16 ${padT + plotH / 2}) rotate(-90)" fill="#9c8a78" font-size="12" text-anchor="middle">move-match accuracy</text>`);
+  parts.push(`<text transform="translate(16 ${padT + plotH / 2}) rotate(-90)" fill="#9c8a78" font-size="12" text-anchor="middle">balanced move accuracy</text>`);
 
   curves.forEach((c, i) => {
     const color = colors[i % colors.length];
-    const pts = c.points.map((p) => `${x(p.trainMatches)},${y(p.moveAcc)}`).join(' ');
+    const pts = c.points.map((p) => `${x(p.trainMatches)},${y(p.balancedMove)}`).join(' ');
     if (c.points.length === 1) {
       const p = c.points[0];
-      parts.push(`<circle cx="${x(p.trainMatches)}" cy="${y(p.moveAcc)}" r="5" fill="${color}"/>`);
+      parts.push(`<circle cx="${x(p.trainMatches)}" cy="${y(p.balancedMove)}" r="5" fill="${color}"/>`);
     } else {
       parts.push(`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5"/>`);
-      for (const p of c.points) parts.push(`<circle cx="${x(p.trainMatches)}" cy="${y(p.moveAcc)}" r="3.5" fill="${color}"/>`);
+      for (const p of c.points) parts.push(`<circle cx="${x(p.trainMatches)}" cy="${y(p.balancedMove)}" r="3.5" fill="${color}"/>`);
     }
     // Legend.
     const ly = padT + 6 + i * 20;

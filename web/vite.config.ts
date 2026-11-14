@@ -11,6 +11,7 @@ export default defineConfig({
         main: resolve(dir, 'index.html'),
         replay: resolve(dir, 'replay.html'),
         fpv: resolve(dir, 'fpv.html'),
+        roster: resolve(dir, 'roster.html'),
       },
     },
   },

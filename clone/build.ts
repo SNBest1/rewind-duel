@@ -4,8 +4,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { observe, createMatch, step, IDLE, type Input, type MatchFile, type Observation, type State } from '@rewind/engine';
-import { DECISION_INTERVAL, samplesFromMatch, slotOf, assertShape, type Sample } from './dataset';
+import { DECISION_INTERVAL, samplesFromMatch, slotOf, assertShape, isSelfMatch, type Sample } from './dataset';
 import { KnnClone } from './knn';
+import { FactoredClone } from './factored';
 import { GuardedClone } from './guarded';
 
 const DATA_DIR = fileURLToPath(new URL('../data/', import.meta.url));
@@ -53,8 +54,11 @@ export type BuildOptions = {
 };
 
 export type BuiltClone = {
-  guarded: GuardedClone;
-  clone: KnnClone;
+  guarded: GuardedClone; // the factored clone wrapped in the circuit breaker (the default)
+  clone: KnnClone; // the original joint-vote clone, kept for comparison
+  factored: FactoredClone; // the factored clone, breaker OFF (raw)
+  guardedFactored: GuardedClone; // the factored clone, breaker ON (same object as `guarded`)
+  guardedJoint: GuardedClone; // the joint clone, breaker ON (for the old comparison)
   samples: Sample[];
   breakerLimit: number;
   trainMatchIds: string[];
@@ -102,7 +106,8 @@ export function percentile(xs: number[], p: number): number {
  */
 export function buildClone(playerName: string, opts: BuildOptions = {}): BuiltClone {
   const all = opts.allMatches ?? loadMatches();
-  const mine = matchesOf(all, playerName);
+  // Self-matches (one person on both slots) are never training data: they are not a real duel.
+  const mine = matchesOf(all, playerName).filter((m) => !isSelfMatch(m));
   const holdOut = new Set(opts.holdOut ?? []);
   const trainOnly = opts.trainOnly ? new Set(opts.trainOnly) : null;
   // trainOnly pins the exact training set (learning curve); otherwise train on everything not held out.
@@ -119,14 +124,19 @@ export function buildClone(playerName: string, opts: BuildOptions = {}): BuiltCl
   assertShape(samples);
 
   const clone = new KnnClone(playerName, samples);
+  const factored = new FactoredClone(playerName, samples);
 
-  // Breaker: p95 of nearest-neighbor distances on held-out data the clone never saw.
+  // Breaker: p95 of nearest-neighbor distances on held-out data the clone never saw. The joint and
+  // factored clones share the feature space, so the same limit applies to both.
   const basis = held.length > 0 ? held : train;
   const breakerLimit = percentile(nnDistancesOnMatches(clone, basis, playerName), 0.95);
 
-  const guarded = new GuardedClone(clone, breakerLimit);
+  const guardedFactored = new GuardedClone(factored, breakerLimit);
+  const guardedJoint = new GuardedClone(clone, breakerLimit);
   return {
-    guarded, clone, samples, breakerLimit,
+    guarded: guardedFactored, // default is the factored clone with the breaker on
+    clone, factored, guardedFactored, guardedJoint,
+    samples, breakerLimit,
     trainMatchIds: train.map((m) => m.id),
     holdOutMatchIds: held.map((m) => m.id),
   };

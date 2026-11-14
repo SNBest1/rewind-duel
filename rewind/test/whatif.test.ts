@@ -9,6 +9,7 @@ function passiveClone(): GuardedClone {
     features: Array.from({ length: FEATURE_DIM }, () => 0),
     action: { move: 0, walk: false, aimBucket: 2, fire: false, smoke: false, dash: false, use: false },
     actionId: 0,
+    enemyVisible: false,
     ref: { matchId: 'passive', tick: i, playerName: 'passive', weight: 0 },
   }));
   return new GuardedClone(new KnnClone('passive', samples), 1e9);

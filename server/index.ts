@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE, observe, visibleEvents, type Input, type Slot } from '@rewind/engine';
 import { MatchRunner, sanitizeInput } from './match';
-import { matchList, openSession, replayPayload } from './rewind';
+import { matchList, openSession, replayPayload, rosterData } from './rewind';
 import { runWhatIf, type RewindSession } from '@rewind/rewind';
 import type { MatchFile } from '@rewind/engine';
 
@@ -86,6 +86,11 @@ const http = createServer((req, res) => {
   if (path === '/api/matches') {
     res.writeHead(200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify(matchList(DATA_DIR)));
+  }
+  if (path === '/api/roster') {
+    // Computed fresh from data/ each request so the roster page can poll it as matches land.
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify(rosterData(DATA_DIR)));
   }
   if (path === '/api/replay') {
     const id = url.searchParams.get('id') ?? '';

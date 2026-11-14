@@ -14,6 +14,7 @@ export type Sample = {
   features: number[];
   action: Action;
   actionId: number;
+  enemyVisible: boolean; // was the enemy in sight when this was recorded? the factored fire vote needs it
   ref: TraceRef; // matchId, tick, playerName — the moment this was copied from
 };
 
@@ -21,6 +22,12 @@ export type Sample = {
 export function slotOf(file: MatchFile, playerName: string): Slot | -1 {
   const p = file.players.find((p) => p.name === playerName);
   return p ? p.slot : -1;
+}
+
+/** True when the same name holds both slots — one person played themselves. Such a match is not a real
+ *  duel, so it is excluded from training and eval (and flagged), per the user's instruction. */
+export function isSelfMatch(file: MatchFile): boolean {
+  return file.players.length === 2 && file.players[0].name === file.players[1].name;
 }
 
 /**
@@ -47,6 +54,7 @@ export function samplesFromMatch(file: MatchFile, slot: Slot, playerName: string
         features: extractFeatures(o, prevAction, NUM_ACTIONS),
         action,
         actionId: id,
+        enemyVisible: o.enemy !== null,
         ref: { matchId: file.id, tick: s.tick, playerName, weight: 0 },
       });
       prevAction = id;

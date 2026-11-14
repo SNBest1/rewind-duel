@@ -84,6 +84,7 @@ describe('KnnClone', () => {
       features: Array.from({ length: FEATURE_DIM }, () => base),
       action: { move: actId, walk: false, aimBucket: 2, fire: false, smoke: false, dash: false, use: false },
       actionId: actId,
+      enemyVisible: false,
       ref: { matchId: 'toy', tick: actId, playerName: 'toy', weight: 0 },
     });
     const out: Sample[] = [];
@@ -118,6 +119,7 @@ describe('GuardedClone circuit breaker', () => {
       features: Array.from({ length: FEATURE_DIM }, () => 0),
       action: { move: 0, walk: false, aimBucket: 2, fire: false, smoke: false, dash: false, use: false },
       actionId: 0,
+      enemyVisible: false,
       ref: { matchId: 'toy', tick: i, playerName: 'toy', weight: 0 },
     }));
     return new KnnClone('toy', samples);

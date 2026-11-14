@@ -229,3 +229,29 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 ### D38. A roster page shows who still needs games
 - **Chose:** `eval/roster.md` lists every player, their match count, kind (human/bot), and status (ok / testable, needs more / cannot test yet / dropped fixture).
 - **Why:** the honest bottleneck is data, so the first actionable output is "who needs to play more". Nipun is the only testable human; Supra, Pratul, nipun and Pratul Saini each have one match and cannot be tested until they play again.
+
+## Phase 5 revision 2 (locked metrics, factored clone, self-match exclusion)
+
+### D39. Self-matches are excluded from training and eval, and flagged
+- **Chose:** `isSelfMatch` (same name on both slots) marks a match as not a real duel. `buildClone` never trains on one; the eval drops them from the usable set and prints which were excluded; the roster counts real duels and shows "(+N self excluded)".
+- **Why:** a self-match is one person controlling both sides — it is not opponent data and would teach a clone to play against itself. Nipun's third "match" was a self-match, which had been inflating his count.
+- **Effect:** after exclusion, Nipun has 2 real matches (not 3); the headline honestly rests on 2.
+
+### D40. Metrics are locked in eval/METRICS.md before new data arrives
+- **Chose:** `eval/metrics-doc.ts` writes `eval/METRICS.md` with the fixed definition of every metric, and the eval computes exactly those. Raw metrics (move match, fire match, position error) are kept; new metrics are added beside them, never replacing them.
+- **Why:** the user asked to lock definitions so numbers mean the same thing as more games arrive. A silent redefinition would make old and new runs incomparable.
+- **New metrics:** balanced move accuracy (mean per-class recall over the 9 move options — cannot be gamed by holding still); fire precision and recall on VISIBLE-enemy ticks only (where firing is a real choice); position error on moved-only moments (where the person actually moved).
+
+### D41. The clone is factored: separate move / aim / fire votes, fire restricted to same-visibility neighbors
+- **Chose:** `FactoredClone` runs one k-NN neighborhood, then three distance-weighted votes — move (9 classes), aim bucket, and fire. The fire vote uses only neighbors whose recorded enemy-visibility matches the current tick; with none, it defaults to not firing.
+- **Why:** the joint clone voted on one combined action id, so rare combinations split the k neighbors into singletons and fire almost never won. Separating the votes lets each field draw on all k neighbors, and conditioning fire on visibility is the honest model: "do I shoot" depends on whether an enemy is in sight.
+- **Effect (held-out, real):** fire recall on visible ticks rose to 79% (majority baseline fires 0%), and balanced move 14% now edges the baselines (majority 11%, cross 12%). It is still pure k-NN (hard rule 5). The clone is shown breaker OFF and ON; the breaker fired on 5% of ticks.
+- **Honest caveat it exposed:** in the what-if rollout the clone drives its own movement into positions unlike its training, so its fire-when-seen there is only ~19% (vs the basic bot's 85%). Reported, not hidden.
+
+### D42. The what-if spread now runs against the basic bot as a reference opponent
+- **Chose:** `forkSpread` evaluates all 12 forks against BOTH the factored clone and the basic bot, side by side, and reports each opponent's fire-when-seen rate.
+- **Why:** a plan "winning" only tells you something relative to a baseline opponent. The bot shoots 85% of visible ticks, so beating the bot (win median 60%) is the real bar; beating the passive clone (median 100%) is inflated by the clone's reticence. Showing both makes the inflation visible.
+
+### D43. The roster page refreshes live from the server
+- **Chose:** `GET /api/roster` recomputes match-per-player counts from `data/` on every request (no cache); `web/roster.html` polls it every 4 s and draws bars. `eval/roster.md` remains the static snapshot written each eval run.
+- **Why:** the user wants to watch counts climb as people play. The live page needs no eval re-run; a finished match lands in `data/` and shows up within one poll.
