@@ -35,8 +35,20 @@ export function matchesOf(matches: MatchFile[], playerName: string): MatchFile[]
   return matches.filter((m) => m.players.some((p) => p.name === playerName));
 }
 
+/** True when both slots of a match were the scripted bot (names bot-one / bot-two). Bot games are a sanity
+ *  check, not the human-skill result, so the eval splits on this. */
+export function isBotMatch(m: MatchFile): boolean {
+  return m.players.every((p) => /^bot-/.test(p.name));
+}
+
+/** True when a player's name is a scripted bot. */
+export function isBotName(name: string): boolean {
+  return /^bot-/.test(name);
+}
+
 export type BuildOptions = {
   holdOut?: string[]; // match ids to exclude from training (used to measure the breaker limit and for evals)
+  trainOnly?: string[]; // if set, train on EXACTLY these match ids (used by the learning curve)
   allMatches?: MatchFile[]; // pass a preloaded set to avoid re-reading disk
 };
 
@@ -92,7 +104,9 @@ export function buildClone(playerName: string, opts: BuildOptions = {}): BuiltCl
   const all = opts.allMatches ?? loadMatches();
   const mine = matchesOf(all, playerName);
   const holdOut = new Set(opts.holdOut ?? []);
-  const train = mine.filter((m) => !holdOut.has(m.id));
+  const trainOnly = opts.trainOnly ? new Set(opts.trainOnly) : null;
+  // trainOnly pins the exact training set (learning curve); otherwise train on everything not held out.
+  const train = mine.filter((m) => (trainOnly ? trainOnly.has(m.id) : !holdOut.has(m.id)));
   const held = mine.filter((m) => holdOut.has(m.id));
   if (train.length === 0) throw new Error(`no training matches for "${playerName}" (have ${mine.length}, held out ${held.length})`);
 

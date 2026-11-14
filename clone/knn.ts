@@ -95,4 +95,9 @@ export class KnnClone implements Policy {
     const input = decodeAction(n.action, obs);
     return { input, confidence: n.confidence, because: n.because };
   }
+
+  /** Forgets the previous action, so the next decision is independent. Used by one-shot probes. */
+  reset(): void {
+    this.prevAction = -1;
+  }
 }

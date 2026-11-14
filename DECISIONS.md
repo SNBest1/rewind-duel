@@ -203,3 +203,29 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** left the server as the Node process behind a Cloudflare Tunnel (D14), not a Durable Object.
 - **Why:** a DO moves the engine to the Workers runtime, which risks hard rule 3 (every replay, fork and sim must run in the runtime that ran the live match) unless the whole pipeline moves with it, and it needs new storage for match files. That is a deploy-shaped project, not a final-hour change, and the evidence phases are the higher-value work.
 - **Ruled out for now:** doing it under time pressure and risking the determinism guarantee that the clones and replays depend on.
+
+## Phase 5 revision (honest evidence)
+
+### D34. Human matches are the result; bot matches are a labelled sanity check; fixtures are dropped
+- **Chose:** `eval/run.ts` splits the dataset with `isBotMatch` (both players `bot-*`). Human clones are the headline table; bot clones are a separate table labelled "sanity check only — NOT the main result". The alpha/bravo and p1/p2 fixtures are dropped (`DROP_PLAYERS`): pub1 is 160 ticks, t1 is one player barely moving, tunneltest is 100 ticks — none are skill data.
+- **Why:** scripted bots are perfectly repeatable, so their clones score 77–84% and would flatter the result if mixed in. The judge grades on cloning a real person, so that number must stand alone and be honest about being thin.
+- **Tradeoff:** after dropping fixtures, only one human (Nipun) has two or more matches, and one of those is a self-match. The eval says so plainly rather than padding the table.
+
+### D35. Majority-action baseline, and move/fire reported separately
+- **Chose:** added `MajorityBaseline` (always that player's single most common action) beside the basic bot and cross clone. Accuracy reports move-direction match and fire match as separate columns, plus 1-second position error.
+- **Why:** fire is dominated by "not firing" (both the person and any policy mostly hold fire), so a combined score hides whether the clone captures *movement*. Move match is the discriminating signal. The majority baseline is the real floor: a clone that cannot beat "always do your most common thing" is only learning the habit, not the situation.
+- **What it showed (honest):** Nipun's own clone did NOT beat the baselines — majority action matched moves 31% vs the clone's 29%, and landed closer in position. Reported as-is; the "Honest read" section says why (tiny, noisy human data; few neighbors; a mostly-still player is easy to match).
+
+### D36. Learning curve plus an SVG chart, on the same held-out match as the table
+- **Chose:** `eval/learning-curve.ts` trains on 1, 2, 3, ... of a player's matches (holding out the FIRST match, the same one section 1 uses) and plots move-match accuracy, as a self-contained SVG (`eval/learning-curve.svg`) for the video.
+- **Why:** the curve is the argument that more games help, which matters when the current human numbers are weak. Holding out the same match keeps the curve's endpoint consistent with the accuracy table.
+- **What it showed:** bots climb with data (bot-two 43% -> 58% -> 78% move match); Nipun is flat at ~30% across 1–2 matches — the honest signal that he needs more, varied games.
+
+### D37. The what-if search is audited and reported as a spread with a clone-fire caveat
+- **Chose:** `eval/whatif-audit.ts` proves fog holds by moving the hidden enemy off-sightline and checking every plan's and the clone's decision is unchanged (they see only `observe`). It confirms the clone CAN fire head-on. It then runs the what-if on 12 forks across the human matches and reports the spread (min/median/max), not one fork, plus the clone's fire rate when it could see the human.
+- **Why:** a single fork is cherry-picking. And a plan "winning" against a clone that never shoots is not evidence the plan is good — so the clone's fire-when-seen rate is reported as the caveat it is.
+- **What it showed (honest):** best-plan win rate median 100%, but the clone fired on only ~32% of ticks it could see the human. The per-fork table shows forks where the clone saw the human 20+ ticks and fired zero. The win rate is partly the clone's passivity (its training data had little firing), not plan quality. More recorded human games where the person shoots would fix it; the breaker's basic bot does shoot, so the head-on audit still passes.
+
+### D38. A roster page shows who still needs games
+- **Chose:** `eval/roster.md` lists every player, their match count, kind (human/bot), and status (ok / testable, needs more / cannot test yet / dropped fixture).
+- **Why:** the honest bottleneck is data, so the first actionable output is "who needs to play more". Nipun is the only testable human; Supra, Pratul, nipun and Pratul Saini each have one match and cannot be tested until they play again.

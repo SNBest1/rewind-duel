@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" font-family="ui-monospace, Menlo, monospace">
+<rect width="720" height="420" fill="#160f0c"/>
+<text x="60" y="28" fill="#efe2c9" font-size="18" font-weight="700">Clone move-match accuracy vs training matches</text>
+<line x1="60" y1="370" x2="550" y2="370" stroke="#3a2d25" stroke-width="1"/>
+<text x="52" y="374" fill="#9c8a78" font-size="11" text-anchor="end">0%</text>
+<line x1="60" y1="290" x2="550" y2="290" stroke="#3a2d25" stroke-width="1"/>
+<text x="52" y="294" fill="#9c8a78" font-size="11" text-anchor="end">25%</text>
+<line x1="60" y1="210" x2="550" y2="210" stroke="#3a2d25" stroke-width="1"/>
+<text x="52" y="214" fill="#9c8a78" font-size="11" text-anchor="end">50%</text>
+<line x1="60" y1="130" x2="550" y2="130" stroke="#3a2d25" stroke-width="1"/>
+<text x="52" y="134" fill="#9c8a78" font-size="11" text-anchor="end">75%</text>
+<line x1="60" y1="50" x2="550" y2="50" stroke="#3a2d25" stroke-width="1"/>
+<text x="52" y="54" fill="#9c8a78" font-size="11" text-anchor="end">100%</text>
+<text x="60" y="390" fill="#9c8a78" font-size="11" text-anchor="middle">1</text>
+<text x="305" y="390" fill="#9c8a78" font-size="11" text-anchor="middle">2</text>
+<text x="550" y="390" fill="#9c8a78" font-size="11" text-anchor="middle">3</text>
+<text x="305" y="410" fill="#9c8a78" font-size="12" text-anchor="middle">training matches</text>
+<text transform="translate(16 210) rotate(-90)" fill="#9c8a78" font-size="12" text-anchor="middle">move-match accuracy</text>
+<polyline points="60,272.7520235467255 305,272.7520235467255" fill="none" stroke="#ffb547" stroke-width="2.5"/>
+<circle cx="60" cy="272.7520235467255" r="3.5" fill="#ffb547"/>
+<circle cx="305" cy="272.7520235467255" r="3.5" fill="#ffb547"/>
+<rect x="566" y="47" width="12" height="12" fill="#ffb547"/>
+<text x="584" y="57" fill="#efe2c9" font-size="12">Nipun</text>
+<polyline points="60,168.2372881355932 305,143.28813559322032 550,131.35593220338984" fill="none" stroke="#7fd6e8" stroke-width="2.5"/>
+<circle cx="60" cy="168.2372881355932" r="3.5" fill="#7fd6e8"/>
+<circle cx="305" cy="143.28813559322032" r="3.5" fill="#7fd6e8"/>
+<circle cx="550" cy="131.35593220338984" r="3.5" fill="#7fd6e8"/>
+<rect x="566" y="67" width="12" height="12" fill="#7fd6e8"/>
+<text x="584" y="77" fill="#efe2c9" font-size="12">bot-one (bot)</text>
+<polyline points="60,233.3220338983051 305,184.5084745762712 550,119.42372881355934" fill="none" stroke="#e5483b" stroke-width="2.5"/>
+<circle cx="60" cy="233.3220338983051" r="3.5" fill="#e5483b"/>
+<circle cx="305" cy="184.5084745762712" r="3.5" fill="#e5483b"/>
+<circle cx="550" cy="119.42372881355934" r="3.5" fill="#e5483b"/>
+<rect x="566" y="87" width="12" height="12" fill="#e5483b"/>
+<text x="584" y="97" fill="#efe2c9" font-size="12">bot-two (bot)</text>
+</svg>

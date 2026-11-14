@@ -54,4 +54,10 @@ export class GuardedClone implements Policy {
   wouldBreak(obs: Observation): boolean {
     return this.clone.neighborhood(obs).nnDist > this.breakerLimit;
   }
+
+  /** Forgets all carried state (clone prevAction, bot route), so the next decision is independent. */
+  reset(): void {
+    this.clone.reset();
+    this.bot.reset();
+  }
 }

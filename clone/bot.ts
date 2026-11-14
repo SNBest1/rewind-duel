@@ -35,6 +35,12 @@ export class BasicBot implements Policy {
     return []; // the bot cites no recording; its reason is a rule, written on the BREAKER/own line
   }
 
+  /** Forgets route progress so the next decision is independent. Used by one-shot probes. */
+  reset(): void {
+    this.leg = 0;
+    this.site = 'A';
+  }
+
   act(o: Observation): { input: Input; confidence: number; because: TraceRef[] } {
     const self = o.self;
     const attacker = o.attacker === o.slot;
