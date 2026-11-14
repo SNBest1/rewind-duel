@@ -5,7 +5,7 @@ import {
   BUY_TICKS, C, IDLE, NO_WEAPON, SHIELDS, WEAPONS, angleDiff, cachedField, cellCenter, distanceField, getMap, navGrid, nearestFree, sightBlocked, stepToward, weapon,
   type GameMap, type Input, type NavGrid, type Observation, type Slot,
 } from '@rewind/engine';
-import type { Decision, Policy, TraceLine } from '../clone/policy';
+import type { Decision, Policy, TraceLine } from '../ai/clone/policy';
 import { Belief } from './belief';
 import { heatCenter, mapMemory, type Brain, type MapMemory } from './brain';
 import { RANK_STEPS, rankOf, skillOfRank } from './ranks';

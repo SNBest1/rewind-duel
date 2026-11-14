@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // These replay whole recorded matches, which takes a few seconds, more than vitest's 5 s default allows.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 import { IDLE, createMatch, observe, step, type MatchFile } from '@rewind/engine';
-import { BasicBot, seededRng } from '../../server/ai';
+import { BasicBot, seededRng } from '../../../server/ai';
 import { agreement } from '../evaluate';
 import { FEATURE_NAMES, FEATURE_WEIGHTS, IDLE_ACTION, MOVES, actionFromInput, features, inputFromAction } from '../features';
 import { GuardedClone, buildClone, samplesFromMatch, type Sample } from '../knn';

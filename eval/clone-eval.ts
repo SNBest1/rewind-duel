@@ -2,9 +2,9 @@
 // Writes eval/results.md. Reports the real numbers, weak or not.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { agreement, type Agreement } from '../clone/evaluate';
-import { buildClone, loadMatches, matchesOf } from '../clone/knn';
-import type { BranchFile } from '../rewind/session';
+import { agreement, type Agreement } from '../ai/clone/evaluate';
+import { buildClone, loadMatches, matchesOf } from '../ai/clone/knn';
+import type { BranchFile } from '../ai/rewind/session';
 import { BasicBot, seededRng } from '../server/ai';
 import type { Brain } from '../server/brain';
 

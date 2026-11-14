@@ -3,7 +3,7 @@ import { MAP_IDS, hashState, observe, replayMatch, type GameEvent } from '@rewin
 import { AiPlayer, seededRng } from '../ai';
 import { Trainer, blankBrain, summarize } from '../brain';
 import { MatchRunner } from '../match';
-import type { TraceLine } from '../../clone/policy';
+import type { TraceLine } from '../../ai/clone/policy';
 
 // Each test plays one or more full matches with two thinking bots: seconds, not milliseconds.
 vi.setConfig({ testTimeout: 60_000 });

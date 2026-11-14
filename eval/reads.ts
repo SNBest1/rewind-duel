@@ -3,7 +3,7 @@
 // like a real player's file does. We count how often its blind call ("you are hitting A") was right.
 // Run with: npm run eval:reads
 import { observe } from '@rewind/engine';
-import { ALICE, StylePlayer } from '../clone/test/fixtures';
+import { ALICE, StylePlayer } from '../ai/clone/test/fixtures';
 import { AiPlayer, seededRng } from '../server/ai';
 import { Trainer, blankBrain } from '../server/brain';
 import { MatchRunner } from '../server/match';

@@ -2,8 +2,8 @@ import {
   IDLE, distanceField, getMap, navGrid, observe, stepToward,
   type Input, type MatchFile, type Observation, type Slot,
 } from '@rewind/engine';
-import { seededRng, type Rng } from '../../server/ai';
-import { MatchRunner } from '../../server/match';
+import { seededRng, type Rng } from '../../../server/ai';
+import { MatchRunner } from '../../../server/match';
 
 /**
  * A scripted stand-in for a human with habits of their own. It is deliberately NOT built on the AI bot,

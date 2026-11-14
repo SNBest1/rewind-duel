@@ -1,10 +1,10 @@
 // Runs the what-if planner off the main thread, so 100 simulated futures never stall a live match.
 import { parentPort, workerData } from 'node:worker_threads';
 import type { Slot } from '@rewind/engine';
-import { GuardedClone, buildClone, loadMatches } from '../clone/knn';
-import type { Policy } from '../clone/policy';
-import { forkState } from '../rewind/session';
-import { PLANS, whatIf } from '../rewind/whatif';
+import { GuardedClone, buildClone, loadMatches } from '../ai/clone/knn';
+import type { Policy } from '../ai/clone/policy';
+import { forkState } from '../ai/rewind/session';
+import { PLANS, whatIf } from '../ai/rewind/whatif';
 import { BasicBot, seededRng } from './ai';
 
 const { dataDir, matchId, tick, slot } = workerData as { dataDir: string; matchId: string; tick: number; slot: Slot };

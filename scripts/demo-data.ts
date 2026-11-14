@@ -4,7 +4,7 @@
 // Run with: npm run demo:data
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ALICE, BOB, recordedMatch } from '../clone/test/fixtures';
+import { ALICE, BOB, recordedMatch } from '../ai/clone/test/fixtures';
 
 const DATA = process.env.DATA_DIR ?? fileURLToPath(new URL('../data/', import.meta.url));
 mkdirSync(DATA, { recursive: true });

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { replayMatch, type MatchFile } from '@rewind/engine';
 import { buildClone, GuardedClone } from '../../clone/knn';
 import { recordedMatch } from '../../clone/test/fixtures';
-import { BasicBot, seededRng } from '../../server/ai';
+import { BasicBot, seededRng } from '../../../server/ai';
 import { coachMoments } from '../coach';
 import { forkState } from '../session';
 import { analyzeMatch } from '../summary';

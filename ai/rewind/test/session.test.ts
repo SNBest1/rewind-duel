@@ -2,9 +2,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { IDLE, hashState, observe, replayMatch, type Input, type MatchFile, type State } from '@rewind/engine';
 import { buildClone, GuardedClone } from '../../clone/knn';
 import { recordedMatch } from '../../clone/test/fixtures';
-import { BasicBot, seededRng } from '../../server/ai';
-import { MatchRunner } from '../../server/match';
-import { DIVERGENCE_LIMIT, divergenceScore } from '../divergence';
+import { BasicBot, seededRng } from '../../../server/ai';
+import { MatchRunner } from '../../../server/match';
+import { DIVERGENCE_LIMIT, divergenceScore } from '../../../rewind/divergence';
 import { forkState, inputsAt, replayBranch, runBranch, RewindDriver, type BranchFile } from '../session';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });

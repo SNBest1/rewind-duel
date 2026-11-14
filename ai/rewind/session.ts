@@ -5,7 +5,7 @@ import {
   type GameEvent, type Input, type MatchFile, type Slot, type State,
 } from '@rewind/engine';
 import type { Policy, TraceLine } from '../clone/policy';
-import { DIVERGENCE_LIMIT, divergenceScore } from './divergence';
+import { DIVERGENCE_LIMIT, divergenceScore } from '../../rewind/divergence';
 
 export type BranchOutcome = 'won' | 'lost';
 
