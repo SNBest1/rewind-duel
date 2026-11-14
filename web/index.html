@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rewind Duel</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0e1116; color: #d7dde5; font: 15px ui-monospace, Menlo, monospace; overflow: hidden; }
+    body { display: flex; flex-direction: column; align-items: center; }
+    .bar { height: 32px; line-height: 32px; white-space: pre; }
+    canvas { background: #2c3542; cursor: crosshair; }
+    #join { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; background: #0e1116ee; }
+    #join input, #join button { font: inherit; padding: 8px 12px; width: 220px; box-sizing: border-box; border: 1px solid #3a4352; background: #161b22; color: inherit; }
+    #join button { background: #2f6f6a; cursor: pointer; }
+    #status { min-height: 1.2em; color: #e0b050; }
+    .help { color: #7d8794; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="top" class="bar"></div>
+  <canvas id="c"></canvas>
+  <div id="bottom" class="bar"></div>
+  <form id="join">
+    <h1>Rewind Duel</h1>
+    <input id="name" placeholder="Your name" maxlength="16" required />
+    <input id="room" placeholder="Room code" maxlength="16" required />
+    <button>Join</button>
+    <div id="status"></div>
+    <div class="help">WASD move · Shift walk · Mouse aim · Click fire · R reload · Q smoke · E dash · F plant / defuse</div>
+  </form>
+  <script type="module" src="/main.ts"></script>
+</body>
+</html>
