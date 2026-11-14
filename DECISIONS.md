@@ -89,3 +89,24 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** room codes must match `[a-z0-9-]{1,16}` (the code is part of the match file name), WebSocket messages are capped at 1 KB, at most 50 rooms are open at once, and static files are served from an in-memory map of the build output by exact path.
 - **Why:** before this, a room code like `../../x` would have written a file outside `data/`. That was harmless on a trusted LAN and is not on a public URL.
 - **Tradeoff:** no accounts and no rate limiting. Anyone with the URL can fill rooms and write match files to disk until the 50-room cap; fine for a demo, not for leaving up.
+
+## Design and feel pass
+
+### D16. The client predicts its own movement, for display only (replaces D10's "no prediction")
+- **Chose:** the engine's movement rule is exported as `applyMovement` (it reads and writes only position and dash fields). The browser runs it on inputs the server has not acknowledged yet and draws you there. Every input carries a sequence number; each observation carries the number of the input applied (`ack`). On each observation the prediction is rebuilt from the server's position plus the unacknowledged inputs (`web/predict.ts`).
+- **Why:** over the tunnel, players were feeling the full round trip on every keypress. With 120 ms of round trip your dot now moves within one frame and one send tick of the key.
+- **Why it keeps hard rule 3:** nothing the browser computes is sent, logged or replayed. The match of record, replays and every future fork still run in Node. The browser still never calls `step`, and only predicts movement: shots, damage, smokes, plant and the enemy are all exactly what the server says.
+- **Tradeoff:** your vision cone is drawn from the predicted position, so it can run a few ticks ahead of the server's visibility check. For that moment the fog looks open where the enemy is still hidden.
+- **Ruled out:** predicting shots or hits (the server would have to roll back a kill, which feels worse than delay); running full `step` in the browser (needs the enemy's state, which the client is not allowed to know).
+
+### D17. The server applies inputs one per tick from a short queue
+- **Chose:** each slot's inputs queue on arrival and one is applied per tick. With nothing new the last input stays in force. If more than 2 are waiting the oldest are dropped.
+- **Why:** prediction assumes one input equals one tick. With "latest wins", two inputs arriving in the same tick meant one was never applied, and the prediction visibly snapped back. In the browser at 120 ms round trip, that showed up as several backward jumps per second of running; with the queue there were none in 4 runs. `web/test/predict.test.ts` covers bunched arrival.
+- **Tradeoff:** a queued input adds up to one tick (31 ms) of delay. A dropped input can lose a single-tick press when the network bursts badly.
+- **Ruled out:** an unbounded queue (a burst becomes permanent lag); a cap of 4 (in the browser, the lag readout settled about 60 ms higher).
+
+### D18. The game rules did not change in the design pass
+- **Chose:** every gameplay improvement is in what the client shows and plays: a crosshair whose gap is the real spread for how you are moving, a direction marker towards whoever hit you, reload and plant/defuse rings, the last-seen marker with its age, the defuse range, a spike beep that speeds up, and synthesized sound cues panned left or right.
+- **Why:** recordings, tests and the clones planned for Phase 3 all depend on the rules. Changing them now would cost more than it gains.
+- **Tradeoff:** the client only reveals what the server already sent it. Sound plays only for events this player is allowed to see, so there are no footsteps.
+- **Open:** audible footsteps (a running enemy within some range is "heard") would make walking matter beyond accuracy. It needs an engine change to `observe`, and it would change the fog-leak test's property, so it waits for a decision.

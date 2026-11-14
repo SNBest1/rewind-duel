@@ -4,30 +4,137 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Rewind Duel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Martian+Mono:wdth,wght@75..112.5,400..700&display=swap" rel="stylesheet" />
   <style>
-    html, body { margin: 0; height: 100%; background: #0e1116; color: #d7dde5; font: 15px ui-monospace, Menlo, monospace; overflow: hidden; }
-    body { display: flex; flex-direction: column; align-items: center; }
-    .bar { height: 32px; line-height: 32px; white-space: pre; }
-    canvas { background: #2c3542; cursor: crosshair; }
-    #join { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; background: #0e1116ee; }
-    #join input, #join button { font: inherit; padding: 8px 12px; width: 220px; box-sizing: border-box; border: 1px solid #3a4352; background: #161b22; color: inherit; }
-    #join button { background: #2f6f6a; cursor: pointer; }
-    #status { min-height: 1.2em; color: #e0b050; }
-    .help { color: #7d8794; font-size: 13px; }
+    /* Magnetic-tape palette: the floor is oxide, the walls bakelite, you are the VU needle, the rival is ice. */
+    :root {
+      --oxide-950: #160f0c;
+      --oxide-900: #1d1612;
+      --oxide-800: #4b3a2e;
+      --bakelite: #8b735f;
+      --label: #efe2c9;
+      --dim: #9c8a78;
+      --vu: #ffb547;
+      --ice: #7fd6e8;
+      --rec: #e5483b;
+      --display: 'Big Shoulders Display', Impact, sans-serif;
+      --mono: 'Martian Mono', ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--oxide-950); color: var(--label); font: 13px/1.4 var(--mono); font-stretch: 87.5%; overflow: hidden; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #deck { display: flex; flex-direction: column; gap: 0; }
+    canvas { display: block; }
+    #arena { cursor: none; background: var(--oxide-800); }
+
+    /* Transport bar */
+    #transport { display: flex; align-items: center; gap: 20px; height: 44px; padding: 0 2px; }
+    .rec { display: flex; align-items: center; gap: 8px; color: var(--rec); font-weight: 700; letter-spacing: .12em; }
+    .rec i { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: .15; } }
+    .score { display: flex; align-items: baseline; gap: 10px; font-family: var(--display); font-weight: 900; font-size: 30px; line-height: 1; letter-spacing: .02em; }
+    .score .me { color: var(--vu); }
+    .score .them { color: var(--ice); }
+    .score .n { font-size: 15px; font-family: var(--mono); font-weight: 400; color: var(--dim); letter-spacing: 0; text-transform: uppercase; }
+    .side { padding: 3px 8px; border: 1px solid currentColor; font-weight: 700; letter-spacing: .14em; font-size: 11px; }
+    .grow { flex: 1; }
+    .clock { font-family: var(--display); font-weight: 900; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .clock small { font-size: 16px; color: var(--dim); }
+    .clock.hot { color: var(--rec); }
+    .net { color: var(--dim); font-size: 11px; min-width: 64px; text-align: right; }
+
+    /* Tape strip: the round as the recorder sees it */
+    #tape { background: var(--oxide-900); border-top: 1px solid #3a2d25; }
+
+    /* Readout row */
+    #readout { display: flex; align-items: center; gap: 24px; height: 48px; padding: 0 2px; }
+    .hp { font-family: var(--display); font-weight: 900; font-size: 30px; line-height: 1; min-width: 56px; font-variant-numeric: tabular-nums; }
+    .hp.low { color: var(--rec); }
+    .label { color: var(--dim); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; display: block; }
+    .pips { display: flex; gap: 3px; margin-top: 3px; }
+    .pips b { width: 6px; height: 14px; background: var(--vu); }
+    .pips b.off { background: #4a3a30; }
+    .key { display: inline-flex; align-items: center; gap: 7px; }
+    .key kbd { font: 700 11px var(--mono); padding: 3px 7px; border: 1px solid var(--dim); color: var(--label); }
+    .key.spent { opacity: .35; }
+    .key.spent kbd { text-decoration: line-through; }
+    .hint { color: var(--vu); }
+
+    /* Join card, styled as a cassette label */
+    #join { position: fixed; inset: 0; display: grid; place-items: center; background: var(--oxide-950); padding: 16px; }
+    .card { width: min(420px, 100%); background: var(--label); color: var(--oxide-900); padding: 22px 24px 20px; position: relative; }
+    .card::before { content: ''; position: absolute; left: 24px; right: 24px; top: 0; height: 6px; background: repeating-linear-gradient(90deg, var(--vu) 0 40px, var(--rec) 40px 80px, var(--ice) 80px 120px); }
+    .card h1 { margin: 6px 0 0; font: 900 64px/0.9 var(--display); letter-spacing: .01em; text-transform: uppercase; }
+    .card p { margin: 10px 0 18px; font-size: 12px; }
+    .card label { display: block; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 12px; }
+    .card input { width: 100%; font: 400 15px var(--mono); padding: 6px 0; border: 0; border-bottom: 2px solid var(--oxide-900); background: transparent; color: inherit; outline: none; }
+    .card input:focus { border-bottom-color: var(--rec); }
+    .card button { margin-top: 20px; width: 100%; font: 900 22px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px; border: 0; background: var(--oxide-900); color: var(--label); cursor: pointer; }
+    .card button:hover { background: var(--rec); }
+    .card button:focus-visible, .card input:focus-visible { outline: 2px solid var(--rec); outline-offset: 2px; }
+    #status { min-height: 1.4em; margin-top: 12px; font-size: 12px; }
+    .keys { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11px; }
+    .keys b { font-weight: 700; }
+
+    /* End-of-match sheet */
+    #result { position: fixed; inset: 0; display: none; place-items: center; background: #160f0ccc; }
+    #result .card h1 { font-size: 80px; }
+    @media (prefers-reduced-motion: reduce) { .rec i { animation: none; } }
   </style>
 </head>
 <body>
-  <div id="top" class="bar"></div>
-  <canvas id="c"></canvas>
-  <div id="bottom" class="bar"></div>
+  <div id="deck">
+    <div id="transport">
+      <span class="rec"><i></i>REC</span>
+      <span class="score"><span class="me" id="myScore">0</span><span class="n" id="myName">you</span><span class="n">·</span><span class="n" id="theirName">rival</span><span class="them" id="theirScore">0</span></span>
+      <span class="side" id="side">ATTACK</span>
+      <span class="grow"></span>
+      <span class="net" id="net"></span>
+      <span class="clock" id="clock">1:00</span>
+    </div>
+    <canvas id="arena"></canvas>
+    <canvas id="tape"></canvas>
+    <div id="readout">
+      <div><span class="label">Health</span><span class="hp" id="hp">100</span></div>
+      <div><span class="label" id="ammoLabel">Ammo</span><span class="pips" id="ammo"></span></div>
+      <span class="key" id="smokeKey"><kbd>Q</kbd>smoke</span>
+      <span class="key" id="dashKey"><kbd>E</kbd>dash</span>
+      <span class="grow"></span>
+      <span class="hint" id="hint"></span>
+    </div>
+  </div>
+
   <form id="join">
-    <h1>Rewind Duel</h1>
-    <input id="name" placeholder="Your name" maxlength="16" required />
-    <input id="room" placeholder="Room code" maxlength="16" required />
-    <button>Join</button>
-    <div id="status"></div>
-    <div class="help">WASD move · Shift walk · Mouse aim · Click fire · R reload · Q smoke · E dash · F plant / defuse</div>
+    <div class="card">
+      <h1>Rewind<br />Duel</h1>
+      <p>One on one. First to five rounds. Every tick of the match is recorded.</p>
+      <label for="name">Your name</label>
+      <input id="name" maxlength="16" autocomplete="off" required />
+      <label for="room">Room code</label>
+      <input id="room" maxlength="16" autocomplete="off" pattern="[A-Za-z0-9-]+" title="Letters, numbers and dashes" required />
+      <button>Join room</button>
+      <div id="status" role="status"></div>
+      <div class="keys">
+        <b>WASD</b><span>move</span>
+        <b>Shift</b><span>walk: slower, tighter aim</span>
+        <b>Mouse</b><span>aim, hold to fire</span>
+        <b>R</b><span>reload</span>
+        <b>Q / E</b><span>smoke / dash, once a round</span>
+        <b>F</b><span>hold to plant (attack) or defuse (defend)</span>
+        <b>M</b><span>mute</span>
+      </div>
+    </div>
   </form>
+
+  <div id="result">
+    <div class="card">
+      <h1 id="resultTitle">Won</h1>
+      <p id="resultSub"></p>
+      <button id="again" type="button">Play again</button>
+    </div>
+  </div>
   <script type="module" src="/main.ts"></script>
 </body>
 </html>

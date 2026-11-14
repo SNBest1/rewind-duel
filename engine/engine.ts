@@ -52,7 +52,7 @@ function cloneState(s: State): State {
  * Moves a circle and pushes it out of any wall it overlaps.
  * Substeps stay under half the radius so the centre can never end up inside a wall, even mid-dash.
  */
-function moveCircle(p: PlayerState, dx: number, dy: number, walls: Rect[]): void {
+function moveCircle(p: { x: number; y: number }, dx: number, dy: number, walls: Rect[]): void {
   const n = Math.ceil(Math.sqrt(dx * dx + dy * dy) / 0.2);
   for (let i = 0; i < n; i++) {
     p.x += dx / n;
@@ -74,8 +74,15 @@ function moveCircle(p: PlayerState, dx: number, dy: number, walls: Rect[]): void
   }
 }
 
-function movePlayer(s: State, slot: Slot, inp: Input, map: GameMap, events: GameEvent[]): void {
-  const p = s.players[slot];
+/** The movement fields `applyMovement` reads and writes. Nothing else about a player affects where they go. */
+export type Mover = Pick<PlayerState, 'x' | 'y' | 'dashes' | 'dashTicks' | 'dashX' | 'dashY' | 'moveState'>;
+
+/**
+ * One tick of one player's movement, mutating `p`. Returns true if a dash started this tick.
+ * Exported so the browser can predict its own movement with exactly the rule the server uses (DECISIONS D16).
+ */
+export function applyMovement(p: Mover, inp: Input, walls: Rect[]): boolean {
+  let started = false;
   let dx = 0;
   let dy = 0;
   if (p.dashTicks > 0) {
@@ -93,7 +100,7 @@ function movePlayer(s: State, slot: Slot, inp: Input, map: GameMap, events: Game
       p.dashX = dx = ((inp.move.x / len) * C.DASH_DIST) / C.DASH_TICKS;
       p.dashY = dy = ((inp.move.y / len) * C.DASH_DIST) / C.DASH_TICKS;
       p.moveState = 2;
-      events.push({ type: 'dash', tick: s.tick, slot });
+      started = true;
     } else {
       const speed = inp.walk ? C.WALK : C.RUN;
       dx = (inp.move.x / len) * speed;
@@ -101,7 +108,8 @@ function movePlayer(s: State, slot: Slot, inp: Input, map: GameMap, events: Game
       p.moveState = inp.walk ? 1 : 2;
     }
   }
-  if (dx !== 0 || dy !== 0) moveCircle(p, dx, dy, map.walls);
+  if (dx !== 0 || dy !== 0) moveCircle(p, dx, dy, walls);
+  return started;
 }
 
 function inRect(r: Rect, x: number, y: number): boolean {
@@ -151,7 +159,7 @@ export function step(prev: State, inputs: [Input, Input]): { next: State; events
     const p = s.players[slot];
     const inp = inputs[slot];
     p.aim = inp.aim;
-    movePlayer(s, slot, inp, map, events);
+    if (applyMovement(p, inp, map.walls)) events.push({ type: 'dash', tick: s.tick, slot });
 
     if (p.fireCooldown > 0) p.fireCooldown--;
     if (p.reloadTicks > 0) {

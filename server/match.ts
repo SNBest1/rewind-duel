@@ -15,6 +15,8 @@ export function sanitizeInput(raw: any): Input {
   };
 }
 
+const MAX_QUEUED = 2;
+
 /**
  * One authoritative match with no networking or clock in it: the caller decides when to tick.
  * It logs an input only when it differs from that slot's previous one, stamped with the tick it first applied on.
@@ -24,16 +26,35 @@ export class MatchRunner {
   private inputs: [Input, Input] = [IDLE, IDLE];
   private lastLogged: [string, string] = ['', ''];
   private log: MatchFile['inputs'] = [];
+  /** Per slot, the client's sequence number of the input in force. Echoed back so the client can reconcile its prediction. */
+  readonly acks: [number, number] = [0, 0];
 
   constructor(readonly id: string, readonly seed: number, readonly names: [string, string]) {
     this.state = createMatch(seed, 'duel');
   }
 
-  setInput(slot: Slot, raw: unknown): void {
-    this.inputs[slot] = sanitizeInput(raw);
+  /**
+   * Inputs waiting to be applied, oldest first. Clients send one input per tick, and each is applied for exactly one
+   * tick so the client's prediction (which assumes the same) stays exact when packets arrive bunched (DECISIONS D17).
+   */
+  private queues: [{ input: Input; seq: number }[], { input: Input; seq: number }[]] = [[], []];
+
+  setInput(slot: Slot, raw: unknown, seq: unknown = 0): void {
+    const q = this.queues[slot];
+    q.push({ input: sanitizeInput(raw), seq: Number.isSafeInteger(seq) ? (seq as number) : 0 });
+    // A backlog is pure added latency, so past this many waiting inputs the oldest are dropped.
+    if (q.length > MAX_QUEUED) q.splice(0, q.length - MAX_QUEUED);
   }
 
   tick(): GameEvent[] {
+    for (const slot of [0, 1] as const) {
+      // With nothing new the previous input stays in force, the same as a held key.
+      const next = this.queues[slot].shift();
+      if (next) {
+        this.inputs[slot] = next.input;
+        this.acks[slot] = next.seq;
+      }
+    }
     for (const slot of [0, 1] as const) {
       const json = JSON.stringify(this.inputs[slot]);
       if (json !== this.lastLogged[slot]) {

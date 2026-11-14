@@ -12,6 +12,9 @@ const TICK_MS = Number(process.env.TICK_MS ?? 1000 / TICK_RATE);
 const DATA_DIR = fileURLToPath(new URL('../data/', import.meta.url));
 const WEB_DIST = fileURLToPath(new URL('../web/dist/', import.meta.url));
 const MAX_ROOMS = 50; // the server may be public, so one visitor must not be able to open unlimited rooms
+// Fake one-way network delay for testing client prediction on one machine. Round trip = 2 * LAG_MS.
+const LAG_MS = Number(process.env.LAG_MS ?? 0);
+const lagged = (fn: () => void) => (LAG_MS > 0 ? setTimeout(fn, LAG_MS) : fn());
 
 type Room = {
   code: string;
@@ -39,7 +42,8 @@ function startMatch(room: Room): void {
       ticked++;
       const events = runner.tick();
       room.sockets.forEach((ws, slot) => {
-        send(ws, { t: 'obs', obs: observe(runner.state, slot as Slot), events: visibleEvents(runner.state, slot as Slot, events) });
+        const msg = { t: 'obs', obs: observe(runner.state, slot as Slot), events: visibleEvents(runner.state, slot as Slot, events), ack: runner.acks[slot] };
+        lagged(() => send(ws, msg));
       });
       if (runner.state.phase === 'matchEnd') finishMatch(room, 'finished');
     }
@@ -111,7 +115,8 @@ wss.on('connection', (ws) => {
       send(ws, { t: 'joined', slot });
       if (room.sockets.length === 2) startMatch(room);
     } else if (msg.t === 'input' && room?.runner) {
-      room.runner.setInput(slot, msg.input);
+      const r = room;
+      lagged(() => r.runner?.setInput(slot, msg.input, msg.seq));
     }
   });
 

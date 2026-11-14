@@ -20,7 +20,7 @@ Rewind lets you jump back into any moment of a round you lost in **Rewind Duel**
 
 - **`engine/`** is the whole game as pure functions with no dependencies: `createMatch`, `step`, `observe`, `hashState`, `replayMatch`. It has no clock and no `Math.random`; randomness comes from a seeded mulberry32 whose state lives inside the game state. Same seed plus same inputs gives the same hash, which is what makes rewinding possible at all.
 - **`server/`** owns the clock. It steps the engine 32 times a second, logs every input change with the tick it applied on, and sends each player only `observe(state, slot)`. The enemy position never leaves the server unless that player can see the enemy.
-- **`web/`** never simulates. It sends keys and mouse, and draws what it is told. Fog of war is enforced by the server, the client only shades it.
+- **`web/`** sends keys and mouse, and draws what it is told. Fog of war is enforced by the server, the client only shades it. The one thing it computes is a prediction of its own movement, using the engine's `applyMovement` on inputs the server has not acknowledged yet, so your own movement does not wait for the round trip (DECISIONS D16). The prediction is never sent or recorded.
 - **`data/`** holds recorded matches. A match file is a seed plus an input log, a few hundred KB, and replays to the exact final state.
 
 ## Install
@@ -54,6 +54,9 @@ This is the development setup (Vite hot reload on 5173, game server on 8080). Op
 | Q | smoke, lands up to 8 units along your aim, once per round |
 | E | dash 4 units in your move direction, once per round |
 | F | hold to plant in A or B (attacker, 2 s, standing still) or defuse (defender, 4 s) |
+| M | mute sound |
+
+The strip under the arena is the round as the server records it: the red head is now, amber marks are your shots (tall ones hit), red marks are hits on you, the blue band is when you could see your rival, and diamonds are kills, deaths and the plant.
 
 When the match ends or someone disconnects, the server writes `data/<room>-<timestamp>.json`.
 
@@ -75,7 +78,15 @@ cloudflared tunnel --url http://localhost:8080
 
 `cloudflared` prints a `https://<random>.trycloudflare.com` URL. Anyone who opens it and enters the same room code plays on your machine, and their matches land in your `data/`. The URL lasts until you stop `cloudflared`, and changes every time you start it. Rebuild and restart the server after changing anything in `web/`.
 
-The game still runs in Node on your laptop, so the laptop has to stay awake and online. Players far away will feel their own latency, since there is no client prediction (DECISIONS D10).
+The game still runs in Node on your laptop, so the laptop has to stay awake and online. Your own movement is predicted, so it feels instant, but shots, hits and the enemy still arrive one round trip late. The HUD shows the current lag.
+
+## Test with fake lag
+
+To see prediction work on one machine, start the server with a fake delay (60 ms each way, so 120 ms round trip):
+
+```bash
+LAG_MS=60 npm run server
+```
 
 ## Replay a match
 
@@ -113,4 +124,4 @@ Not built yet (Phases 2 to 5).
 
 ## Environment
 
-See `.env.example`. `PORT` (default 8080) and `TICK_MS` (default 31.25) are read from the process environment by the server; nothing loads a `.env` file automatically. Under `npm run web` the client assumes the server is on port 8080; the built client uses whatever origin served it.
+See `.env.example`. `PORT` (default 8080), `TICK_MS` (default 31.25) and `LAG_MS` (default 0) are read from the process environment by the server; nothing loads a `.env` file automatically. Under `npm run web` the client assumes the server is on port 8080; the built client uses whatever origin served it.

@@ -5,7 +5,7 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 ## Hard rules (from spec.md)
 
 - No `Math.random()` or `Date.now()` in `engine/`. `npm run check:determinism` enforces it.
-- All replays, forks and sims run in Node. The browser never calls `step`.
+- All replays, forks and sims run in Node. The browser never calls `step`. It may only predict its own movement with `applyMovement`, for display (DECISIONS D16).
 - Never weaken or delete a test to make it pass. Tell Nipun why first.
 - No LLM calls anywhere. Clones are k-NN.
 - No VALORANT names or assets. The game is "Rewind Duel".
@@ -20,7 +20,9 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - `engine/replay.ts` — `replayMatch(file, untilTick)` rebuilds any tick. Phase 2 rewinds start here.
 - `server/match.ts` — `MatchRunner`: engine plus input log, no sockets and no clock, so it is unit-testable.
 - `server/index.ts` — HTTP + WebSocket on one port: serves `web/dist` (if built) and runs rooms and the 32 Hz loop. The only place that touches wall-clock time. It may be exposed publicly through a Cloudflare Tunnel, so treat every client message as hostile (see DECISIONS D15).
-- `web/main.ts` — canvas client. Input in, `Observation` out to pixels.
+- `web/main.ts` — canvas client and DOM HUD. Input in, `Observation` out to pixels. Drawn positions chase their targets (`chase`) so 32 Hz updates look smooth.
+- `web/predict.ts` — `Predictor`: own-movement prediction from seq/ack. `server/match.ts` must apply exactly one queued input per tick or the prediction drifts (D17); `web/test/predict.test.ts` checks this against a real `MatchRunner`.
+- `web/audio.ts` — synthesized WebAudio cues, no asset files. `web/index.html` holds the palette tokens; `main.ts` repeats them as constants for the canvas.
 
 ## Non-obvious things
 
@@ -37,4 +39,5 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - Public URL: `cloudflared tunnel --url http://localhost:8080` after build + server. The client picks its WebSocket URL from the page origin unless it is on port 5173.
 - `npm test`, `npm run typecheck`, `npm run check:determinism`
 - `npm run replay -- data/<id>.json`
+- `LAG_MS=60 npm run server` fakes a 120 ms round trip to test prediction.
 - `npm run botmatch` — two scripted bots play a full match through the real server; `TICK_MS=2` on the server fast-forwards it.
