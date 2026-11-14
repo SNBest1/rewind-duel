@@ -2,3 +2,10 @@ node_modules/
 dist/
 .DS_Store
 .env
+
+# Recorded matches, rewind branches and per-player AI memories are personal play data.
+# Commit a recording on purpose with `git add -f data/<id>.json`, e.g. for a demo.
+data/*.json
+data/brains/
+data/branches/
+!data/.gitkeep

@@ -18,7 +18,12 @@
     "typecheck": "tsc --noEmit",
     "replay": "tsx server/replay.ts",
     "botmatch": "tsx scripts/botmatch.ts",
-    "check:determinism": "node scripts/check-determinism.mjs"
+    "check:determinism": "node scripts/check-determinism.mjs",
+    "eval": "tsx eval/clone-eval.ts",
+    "demo:data": "tsx scripts/demo-data.ts",
+    "eval:belief": "tsx eval/belief-ablation.ts 4",
+    "eval:ranks": "tsx eval/rank-ladder.ts 1",
+    "eval:reads": "tsx eval/reads.ts 4"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

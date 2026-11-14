@@ -62,23 +62,76 @@ function noise(dur: number, gain: number, filter: BiquadFilterType, freq: number
 export const sfx = {
   shot(mine: boolean, pan: number): void {
     if (mine) {
-      noise(0.07, 0.3, 'highpass', 1400);
-      tone(240, 80, 0.06, 'square', 0.06);
+      // Punchy rifle crack: bright transient + mid body + low thump.
+      noise(0.05, 0.42, 'highpass', 2000);
+      noise(0.09, 0.22, 'bandpass', 900);
+      tone(260, 70, 0.07, 'square', 0.09);
+      tone(90, 45, 0.11, 'sine', 0.07);
     } else {
-      noise(0.11, 0.35, 'lowpass', 1000, pan);
-      tone(150, 50, 0.09, 'square', 0.05, pan);
+      // Enemy shot: muffled and distance-panned.
+      noise(0.12, 0.34, 'lowpass', 900, pan);
+      tone(140, 48, 0.1, 'square', 0.06, pan);
+      tone(70, 40, 0.13, 'sine', 0.05, pan);
     }
   },
-  hit: () => tone(1700, 1700, 0.05, 'sine', 0.18),
-  hurt: (pan: number) => tone(170, 45, 0.2, 'sawtooth', 0.18, pan),
+  // Metallic hit-marker "tink" with a short overtone.
+  hit: () => {
+    tone(1850, 1850, 0.05, 'sine', 0.2);
+    tone(2600, 2400, 0.04, 'triangle', 0.08, 0, 0.01);
+  },
+  hurt: (pan: number) => {
+    tone(170, 45, 0.22, 'sawtooth', 0.2, pan);
+    noise(0.1, 0.14, 'lowpass', 600, pan);
+  },
+  // Rising two-note chime with a deep bass tail on a kill.
   kill: () => {
     tone(523, 523, 0.09, 'triangle', 0.22);
     tone(784, 784, 0.16, 'triangle', 0.22, 0, 0.09);
+    tone(110, 90, 0.4, 'sine', 0.16, 0, 0.02);
   },
-  dash: (pan: number) => noise(0.16, 0.18, 'bandpass', 2200, pan),
-  smoke: (pan: number) => noise(0.4, 0.2, 'lowpass', 500, pan),
+  dash: (pan: number) => {
+    noise(0.16, 0.2, 'bandpass', 2200, pan);
+    tone(600, 1400, 0.12, 'sine', 0.06, pan);
+  },
+  smoke: (pan: number) => noise(0.42, 0.22, 'lowpass', 480, pan),
+  // Headshot: a bright metallic dink over the hit marker.
+  head: () => {
+    tone(3200, 3000, 0.07, 'triangle', 0.22);
+    tone(4700, 4300, 0.05, 'sine', 0.12, 0, 0.01);
+    tone(1850, 1850, 0.04, 'sine', 0.12);
+  },
+  buy: () => {
+    tone(880, 1320, 0.06, 'square', 0.05);
+    tone(1320, 1320, 0.05, 'triangle', 0.06, 0, 0.06);
+  },
+  rankUp: (up: boolean) => {
+    const notes = up ? [392, 523, 659, 784] : [523, 440, 349];
+    notes.forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.16, 0, i * 0.09));
+  },
+  // Crisp footstep tick (played while running without walk).
+  step: (pan: number) => noise(0.05, 0.08, 'bandpass', 1600, pan),
   beep: () => tone(1250, 1250, 0.035, 'sine', 0.12),
   plant: () => tone(330, 990, 0.25, 'triangle', 0.18),
+  // Flashbang: pin pull and spoon flick on the throw...
+  flashPin: (pan: number) => {
+    tone(2200, 1900, 0.03, 'square', 0.08, pan);
+    tone(900, 700, 0.05, 'triangle', 0.06, pan, 0.05);
+  },
+  // ...a sharp pop everyone hears...
+  flashPop: (pan: number) => {
+    noise(0.22, 0.5, 'highpass', 700, pan);
+    tone(220, 60, 0.15, 'sine', 0.2, pan);
+  },
+  // ...and the ringing in your ears, only if it caught you. Louder and longer for a full flash.
+  flashRing: (strength: number) => {
+    const s = Math.max(0.3, Math.min(1, strength));
+    tone(4200, 3900, 2.2 * s, 'sine', 0.13 * s);
+    tone(4700, 4500, 1.6 * s, 'sine', 0.05 * s);
+  },
+  teleport: (pan: number) => {
+    tone(300, 1200, 0.18, 'sine', 0.12, pan);
+    noise(0.15, 0.1, 'bandpass', 3000, pan);
+  },
   roundStart: () => {
     tone(440, 440, 0.07, 'square', 0.06);
     tone(660, 660, 0.1, 'square', 0.06, 0, 0.1);

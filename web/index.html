@@ -40,6 +40,9 @@
     .score .n { font-size: 15px; font-family: var(--mono); font-weight: 400; color: var(--dim); letter-spacing: 0; text-transform: uppercase; }
     .side { padding: 3px 8px; border: 1px solid currentColor; font-weight: 700; letter-spacing: .14em; font-size: 11px; }
     .grow { flex: 1; }
+    .ailevel { color: var(--label); }
+    .ailevel[data-dir="up"] { color: var(--rec); }
+    .ailevel[data-dir="down"] { color: var(--ice); }
     .clock { font-family: var(--display); font-weight: 900; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
     .clock small { font-size: 16px; color: var(--dim); }
     .clock.hot { color: var(--rec); }
@@ -78,10 +81,161 @@
     .keys { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11px; }
     .keys b { font-weight: 700; }
 
+    /* Lobby: mode toggle, map vote, difficulty */
+    #join { overflow-y: auto; }
+    .card.wide { width: min(600px, 100%); }
+    .card label small { text-transform: none; letter-spacing: 0; opacity: .7; }
+    .label2 { display: block; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 14px; }
+    .seg { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+    .card .seg button { margin: 0; width: auto; flex: 1; font: 700 12px var(--mono); letter-spacing: .08em; padding: 7px 8px; background: transparent; color: var(--oxide-900); border: 2px solid var(--oxide-900); text-transform: uppercase; }
+    .card .seg button[aria-pressed="true"] { background: var(--oxide-900); color: var(--label); }
+    .card .seg button:hover { background: var(--rec); color: var(--label); border-color: var(--rec); }
+    .maps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+    .card .mapCard { margin: 0; width: auto; padding: 5px; background: transparent; color: var(--oxide-900); border: 2px solid transparent; display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; font: inherit; text-transform: none; letter-spacing: 0; }
+    .card .mapCard:hover { background: #e2d4ba; }
+    .card .mapCard[aria-pressed="true"] { border-color: var(--rec); background: #e8dbc2; }
+    .mapCard .mapArt { width: 100%; height: auto; aspect-ratio: 3 / 2; display: block; background: var(--oxide-800); }
+    .mapCard .randomArt { display: grid; place-items: center; color: var(--vu); font: 900 40px var(--display); }
+    .mapCard b { font: 900 18px/1 var(--display); text-transform: uppercase; margin-top: 3px; }
+    .mapCard small { font-size: 10px; opacity: .75; }
+    .blurb { min-height: 1.4em; font-size: 11px; margin-top: 6px; }
+    .card button.go { margin-top: 18px; }
+
+    /* Map intro card shown as a match starts */
+    #intro { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; text-align: center; }
+    #intro b { font: 900 64px/1 var(--display); color: var(--label); letter-spacing: .04em; text-shadow: 0 2px 0 var(--oxide-950); }
+    #intro span { font-size: 12px; color: var(--label); background: #160f0ccc; padding: 2px 8px; }
+    #intro.show { animation: intro 4.2s ease forwards; }
+    @keyframes intro { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 10%, 75% { opacity: 1; transform: translateX(-50%) translateY(0); } 100% { opacity: 0; } }
+
+    /* What the AI learned, on the result sheet */
+    .insights { margin: 0 0 6px; padding: 0 0 0 18px; font-size: 12px; }
+    .insights li { margin: 4px 0; }
+    .insights .brainHead { margin: 0 0 6px -18px; font-weight: 700; }
+
+    .card button.alt { margin-top: 8px; background: transparent; color: var(--oxide-900); border: 2px solid var(--oxide-900); font-size: 16px; }
+    .card button.alt:hover { background: var(--oxide-900); color: var(--label); }
+
+    /* Replay list */
+    #replays { position: fixed; inset: 0; display: none; place-items: center; background: var(--oxide-950); padding: 16px; overflow-y: auto; }
+    .replayList { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+    .card .matchRow { margin: 0; width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 8px 10px; font: inherit; text-transform: none; letter-spacing: 0; background: #e2d4ba; color: var(--oxide-900); border: 0; }
+    .card .matchRow:hover { background: var(--vu); color: var(--oxide-900); }
+    .matchRow b { font: 900 18px/1.1 var(--display); text-transform: uppercase; }
+    .matchRow small { grid-column: 1 / -1; font-size: 10px; opacity: .7; }
+
+    /* Viewer controls: only in replay mode, where the live HUD is hidden */
+    #viewerBar { display: none; flex-direction: column; gap: 6px; padding: 8px 2px; }
+    body.viewing #viewerBar { display: flex; }
+    body.viewing #transport, body.viewing #readout { display: none; }
+    .vRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #viewerBar button { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 6px 10px; background: transparent; color: var(--label); border: 1px solid var(--dim); cursor: pointer; }
+    #viewerBar button:hover { border-color: var(--label); }
+    #viewerBar button[aria-pressed="true"] { background: var(--label); color: var(--oxide-900); }
+    #viewerBar button:focus-visible { outline: 2px solid var(--vu); outline-offset: 2px; }
+    #scrub { flex: 1; min-width: 160px; accent-color: var(--rec); }
+    .seg2 { display: inline-flex; gap: 4px; }
+    .rounds { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+    #viewerBar .roundChip.won { border-color: var(--vu); color: var(--vu); }
+    #viewerBar .roundChip.lost { border-color: var(--ice); color: var(--ice); }
+    #viewerBar .rewindBtn { background: var(--rec); border-color: var(--rec); color: var(--label); font-size: 13px; padding: 8px 14px; }
+    #viewerBar .rewindBtn:hover { background: #ff5a4c; }
+    #tape { cursor: pointer; }
+    .futures { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .futures:empty { display: none; }
+    #viewerBar .future { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; text-transform: none; letter-spacing: 0; padding: 8px; font: 400 11px var(--mono); }
+    #viewerBar .future small { color: var(--dim); font-size: 9px; letter-spacing: .14em; }
+    #viewerBar .future b { font: 900 16px/1.05 var(--display); text-transform: uppercase; color: var(--label); }
+    #viewerBar .future em { font-style: normal; color: var(--dim); }
+    #viewerBar .future.best { border-color: var(--vu); }
+    #viewerBar .future.best b { color: var(--vu); }
+    #viewerBar .future.base b { color: var(--ice); }
+    #viewerBar button:disabled { opacity: .5; cursor: progress; }
+
+    /* First-person 3D (V): the 2D arena shrinks to a minimap in the corner */
+    #stage { position: relative; }
+    #view3d, #xhair, #blind, #fpHint { display: none; }
+    body.fp #view3d { display: block; position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+    body.fp #arena { position: absolute; left: 10px; top: 10px; width: 26% !important; height: auto !important; z-index: 3; opacity: .92; border: 1px solid var(--vu); pointer-events: none; }
+    body.fp #xhair { display: block; position: absolute; left: 50%; top: 50%; z-index: 4; pointer-events: none; --gap: 6px; }
+    #xhair i { position: absolute; background: var(--vu); box-shadow: 0 0 0 1px #1d1612; }
+    #xhair i:nth-child(1) { width: 2px; height: 8px; left: -1px; top: calc(-8px - var(--gap)); }
+    #xhair i:nth-child(2) { width: 2px; height: 8px; left: -1px; top: var(--gap); }
+    #xhair i:nth-child(3) { width: 8px; height: 2px; top: -1px; left: calc(-8px - var(--gap)); }
+    #xhair i:nth-child(4) { width: 8px; height: 2px; top: -1px; left: var(--gap); }
+    body.fp #blind { display: block; position: absolute; inset: 0; background: #fffcf0; opacity: 0; pointer-events: none; z-index: 5; }
+    body.fp #fpHint { display: block; position: absolute; right: 10px; bottom: 10px; z-index: 4; font-size: 10px; color: var(--label); background: #160f0cb0; padding: 3px 8px; pointer-events: none; }
+    body.fp.locked #fpHint { opacity: .35; }
+
+    /* Buy menu, killfeed, rank-up */
+    #buy { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; background: #0f1923f2; border: 1px solid #ff4655; padding: 12px; width: min(760px, 96%); max-height: 94%; overflow-y: auto; }
+    #buy.open { display: block; }
+    #buy.open.hidden { display: none; }
+    #buyGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+    .buyCol { display: flex; flex-direction: column; gap: 5px; }
+    .buyCol > small { color: #ece8e1; opacity: .6; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+    #buy .gun { cursor: pointer; background: #ece8e10d; border-color: #ece8e133; }
+    #buy .gun:hover { border-color: #ff4655; }
+    #buy .gun.poor { opacity: .35; cursor: not-allowed; }
+    #buy .gun .price { color: #ffd166; font-weight: 700; }
+    .credits { color: #ffd166; font-weight: 700; }
+    .buyHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .buyHead b { font: 900 24px var(--display); letter-spacing: .1em; color: var(--vu); }
+    .buyHead span { color: var(--dim); font-size: 11px; }
+    .buyRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+    .buyRow small { grid-column: 1 / -1; color: var(--dim); font-size: 9px; letter-spacing: .16em; }
+    .gun { border: 1px solid #3a2d25; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+    .gun kbd { font: 700 10px var(--mono); color: var(--oxide-900); background: var(--label); align-self: flex-start; padding: 0 5px; }
+    .gun b { font: 900 17px/1 var(--display); text-transform: uppercase; }
+    .gun span { font-size: 9px; color: var(--dim); line-height: 1.3; }
+    .gun.owned { border-color: var(--vu); background: #ffb5471a; }
+    .gun.owned b { color: var(--vu); }
+    #killfeed { position: absolute; right: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; pointer-events: none; }
+    .kf { display: flex; gap: 6px; align-items: center; background: #160f0cd0; padding: 3px 8px; font-size: 11px; border-left: 3px solid var(--ice); animation: kf 5s forwards; }
+    .kf.mine { border-left-color: var(--vu); }
+    .kf b { font-weight: 700; }
+    .kf span { color: var(--dim); }
+    .kf i { color: #fff; font-style: normal; }
+    @keyframes kf { 0% { opacity: 0; transform: translateX(10px); } 6%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    #rankUp { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); z-index: 7; text-align: center; pointer-events: none; opacity: 0; }
+    #rankUp small { display: block; font: 700 12px var(--mono); letter-spacing: .3em; color: var(--label); }
+    #rankUp b { display: block; font: 900 60px/1 var(--display); text-transform: uppercase; text-shadow: 0 0 24px currentColor; }
+    #rankUp.show { animation: rk 3.2s ease forwards; }
+    @keyframes rk { 0% { opacity: 0; transform: translateX(-50%) scale(.7); } 12% { opacity: 1; transform: translateX(-50%) scale(1.08); } 20%, 80% { opacity: 1; transform: translateX(-50%) scale(1); } 100% { opacity: 0; } }
+    .pips .bar { display: block; width: 120px; height: 10px; background: #4a3a30; margin-top: 5px; }
+    .pips .bar i { display: block; height: 100%; background: var(--vu); }
+    #rankSel { flex: 1; font: 700 12px var(--mono); padding: 6px; border: 2px solid var(--oxide-900); background: transparent; color: var(--oxide-900); }
+    .coach { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; }
+    .coach:empty { display: none; }
+    .coach h3 { margin: 6px 0 0; font: 900 20px var(--display); text-transform: uppercase; }
+    .card .coachItem { margin: 0; width: 100%; text-align: left; font: inherit; text-transform: none; letter-spacing: 0; padding: 8px 10px; background: #e2d4ba; color: var(--oxide-900); border: 0; display: flex; flex-direction: column; gap: 2px; }
+    .card .coachItem:hover { background: var(--vu); }
+    .coachItem b { font: 900 16px/1.1 var(--display); text-transform: uppercase; }
+    .coachItem small { opacity: .75; }
+    @media (prefers-reduced-motion: reduce) { .kf, #rankUp.show { animation-duration: .01s; } }
+
+    /* Behaviour trace: what the AI or clone decided, and why */
+    #trace { position: fixed; right: 8px; top: 8px; bottom: 8px; width: 300px; display: none; flex-direction: column; gap: 6px; background: #160f0ce6; border: 1px solid #3a2d25; padding: 10px; font-size: 11px; z-index: 5; }
+    #trace.open { display: flex; }
+    #trace h2 { margin: 0; font: 900 18px var(--display); text-transform: uppercase; letter-spacing: .04em; }
+    #trace h2 small { font: 400 10px var(--mono); color: var(--dim); text-transform: none; margin-left: 6px; }
+    #memory { display: none; width: 100%; height: auto; cursor: pointer; border: 1px solid var(--vu); }
+    #mindMini { display: none; width: 100%; height: auto; border: 1px solid var(--rec); }
+    .mindLabel { color: var(--rec); font-weight: 700; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .mindLabel small { color: var(--dim); text-transform: none; letter-spacing: 0; font-weight: 400; }
+    #traceList { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    #traceList li { display: grid; grid-template-columns: auto 1fr; gap: 0 6px; line-height: 1.35; }
+    #traceList .tt { color: var(--dim); font-variant-numeric: tabular-nums; }
+    #traceList b { font-weight: 700; letter-spacing: .06em; }
+    #traceList li > span:last-of-type, #traceList .ref { grid-column: 2; }
+    #traceList .ref { justify-self: start; margin-top: 2px; font: 400 10px var(--mono); color: var(--vu); background: none; border: 1px dashed var(--vu); padding: 1px 6px; cursor: pointer; }
+    #traceList .ref:hover { background: var(--vu); color: var(--oxide-900); }
+    .skillChart { width: 100%; height: 56px; color: var(--oxide-900); margin-top: 4px; }
+
     /* End-of-match sheet */
     #result { position: fixed; inset: 0; display: none; place-items: center; background: #160f0ccc; }
     #result .card h1 { font-size: 80px; }
-    @media (prefers-reduced-motion: reduce) { .rec i { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .rec i { animation: none; } #intro.show { animation-duration: 4.2s; animation-timing-function: steps(1); } }
   </style>
 </head>
 <body>
@@ -90,31 +244,89 @@
       <span class="rec"><i></i>REC</span>
       <span class="score"><span class="me" id="myScore">0</span><span class="n" id="myName">you</span><span class="n">·</span><span class="n" id="theirName">rival</span><span class="them" id="theirScore">0</span></span>
       <span class="side" id="side">ATTACK</span>
+      <span class="side ailevel" id="aiLevel" style="display:none">AI</span>
+      <span class="side" id="youRank" style="display:none">YOU</span>
+      <span class="side" id="reads" style="display:none">READS</span>
       <span class="grow"></span>
       <span class="net" id="net"></span>
       <span class="clock" id="clock">1:00</span>
     </div>
-    <canvas id="arena"></canvas>
+    <div id="stage">
+      <canvas id="arena"></canvas>
+      <canvas id="view3d" title="Click to lock the mouse. V for top-down."></canvas>
+      <div id="xhair" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div id="blind" aria-hidden="true"></div>
+      <div id="fpHint">FIRST PERSON · click to lock the mouse · WASD moves where you look · V for top-down</div>
+      <div id="killfeed" aria-live="polite"></div>
+      <div id="rankUp" aria-live="polite"></div>
+      <div id="buy" aria-label="Buy menu">
+        <div class="buyHead"><b>BUY</b><span><span id="buyCredits" class="credits">¤ 800</span> · click or press a key · B hides · <span id="buyTimer">4.0</span>s</span></div>
+        <div id="buyGrid"></div>
+      </div>
+    </div>
     <canvas id="tape"></canvas>
+    <div id="viewerBar">
+      <div class="vRow">
+        <button type="button" id="vBack">← Matches</button>
+        <button type="button" id="vPlay">Play</button>
+        <button type="button" id="vSpeed" title="Playback speed">1×</button>
+        <input type="range" id="scrub" min="0" max="100" value="0" aria-label="Match timeline" />
+        <button type="button" id="vVision" aria-pressed="true" title="Darken what you could not see">Your vision</button>
+      </div>
+      <div class="vRow">
+        <span class="label">You are</span><span id="vMe" class="seg2"></span>
+        <span id="vRounds" class="rounds"></span>
+      </div>
+      <div class="vRow">
+        <button type="button" id="vRewind" class="rewindBtn">Rewind from here vs <span id="vOpp">opponent</span></button>
+        <button type="button" id="vWhatIf" title="Simulate 20 different plans, 5 times each, against their clone, and show the 3 best">What could I have done?</button>
+        <span id="vStatus" class="hint">Pick a moment (click a round, drag the timeline or click the strip), then take control.</span>
+      </div>
+      <div id="whatIf" class="futures"></div>
+    </div>
     <div id="readout">
-      <div><span class="label">Health</span><span class="hp" id="hp">100</span></div>
+      <div><span class="label">Health</span><span class="hp" id="hp">100</span><span class="armor" id="armor"></span></div>
+      <div><span class="label">Credits</span><span class="credits" id="credits">¤ 0</span></div>
       <div><span class="label" id="ammoLabel">Ammo</span><span class="pips" id="ammo"></span></div>
+      <span class="key" title="Swap weapon"><kbd id="otherGun">2 Sidearm</kbd></span>
       <span class="key" id="smokeKey"><kbd>Q</kbd>smoke</span>
       <span class="key" id="dashKey"><kbd>E</kbd>dash</span>
+      <span class="key" id="flashKey"><kbd>C</kbd>flash <span id="flashCount">×2</span></span>
       <span class="grow"></span>
       <span class="hint" id="hint"></span>
     </div>
   </div>
 
+  <div id="intro" aria-live="polite"></div>
+
   <form id="join">
-    <div class="card">
+    <div class="card wide">
       <h1>Rewind<br />Duel</h1>
-      <p>One on one. First to five rounds. Every tick of the match is recorded.</p>
-      <label for="name">Your name</label>
+      <p>One on one. First to five rounds. Every tick is recorded, and the AI learns how you play.</p>
+      <div class="seg" role="group" aria-label="Opponent">
+        <button type="button" data-mode="ai" aria-pressed="true">vs AI</button>
+        <button type="button" data-mode="mirror" aria-pressed="false" title="Play against a clone of yourself, built from your own recorded matches">vs yourself</button>
+        <button type="button" data-mode="pvp" aria-pressed="false">vs friend</button>
+      </div>
+      <p id="modeBlurb" class="blurb"></p>
+      <label for="name">Your name <small>(the AI remembers you by it)</small></label>
       <input id="name" maxlength="16" autocomplete="off" required />
-      <label for="room">Room code</label>
-      <input id="room" maxlength="16" autocomplete="off" pattern="[A-Za-z0-9-]+" title="Letters, numbers and dashes" required />
-      <button>Join room</button>
+      <div id="roomRow">
+        <label for="room">Room code</label>
+        <input id="room" maxlength="16" autocomplete="off" pattern="[A-Za-z0-9\-]+" title="Letters, numbers and dashes" />
+      </div>
+      <span class="label2" id="mapLabel">Map</span>
+      <div id="maps" class="maps"></div>
+      <div id="mapBlurb" class="blurb"></div>
+      <div id="diffRow">
+        <span class="label2">AI rank</span>
+        <div class="seg" role="group" aria-label="AI rank">
+          <button type="button" data-diff="adaptive" aria-pressed="true" title="Ranked: starts low, climbs when you win rounds, drops when you lose. Its level is your rank.">Ranked (adapts to you)</button>
+          <select id="rankSel" aria-label="Or play a fixed rank"></select>
+        </div>
+      </div>
+      <button id="joinBtn" class="go">Play the AI</button>
+      <button type="button" id="openReplays" class="alt">Replays &amp; rewind</button>
       <div id="status" role="status"></div>
       <div class="keys">
         <b>WASD</b><span>move</span>
@@ -122,17 +334,38 @@
         <b>Mouse</b><span>aim, hold to fire</span>
         <b>R</b><span>reload</span>
         <b>Q / E</b><span>smoke / dash, once a round</span>
+        <b>C</b><span>flashbang, two a round. Only blinds whoever is looking at the pop. Turn away to dodge.</span>
         <b>F</b><span>hold to plant (attack) or defuse (defend)</span>
         <b>M</b><span>mute</span>
       </div>
     </div>
   </form>
 
+  <div id="replays">
+    <div class="card wide">
+      <h1>Replays</h1>
+      <p>Pick a match, find a round you lost, and take control from any moment. Your opponent replays exactly what they did until you change the fight, then a clone of them, built from their recorded games, plays on.</p>
+      <div id="replayList" class="replayList"></div>
+      <button type="button" id="replaysBack" class="alt">Back</button>
+    </div>
+  </div>
+
+  <aside id="trace" aria-label="Behaviour trace">
+    <h2>Why it did that <small>T to hide</small></h2>
+    <span class="mindLabel">AI mind: where it thinks you are <small>(B shows it on the map)</small></span>
+    <canvas id="mindMini" width="240" height="160"></canvas>
+    <canvas id="memory" width="240" height="160" title="Click to close"></canvas>
+    <ul id="traceList"></ul>
+  </aside>
+
   <div id="result">
     <div class="card">
       <h1 id="resultTitle">Won</h1>
       <p id="resultSub"></p>
+      <ul id="insights" class="insights"></ul>
+      <div id="coach" class="coach"></div>
       <button id="again" type="button">Play again</button>
+      <button id="toReplay" type="button" class="alt" style="display:none">Back to the replay</button>
     </div>
   </div>
   <script type="module" src="/main.ts"></script>

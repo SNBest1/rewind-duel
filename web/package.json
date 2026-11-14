@@ -1,1 +1,1 @@
-{"name":"@rewind/web","version":"0.0.0","private":true,"type":"module","scripts":{"dev":"vite --host","build":"vite build"},"devDependencies":{"vite":"^8.3.8"},"dependencies":{"@rewind/engine":"^0.0.0"}}
+{"name":"@rewind/web","version":"0.0.0","private":true,"type":"module","scripts":{"dev":"vite --host","build":"vite build"},"devDependencies":{"vite":"^8.3.8"},"dependencies":{"@rewind/engine":"^0.0.0","three":"^0.170.0"}}

@@ -1,6 +1,6 @@
 # Rewind — notes for the next Claude session
 
-Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the source of truth for scope and phases. `DECISIONS.md` logs every design choice with its tradeoff; add an entry for each new one. Phase 1 is done; Phases 2 to 6 are not started.
+Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the source of truth for scope and phases. `DECISIONS.md` logs every design choice with its tradeoff; add an entry for each new one. Phases 1 to 5 are built; phase 6 has the 3D view and footsteps. See README "Status".
 
 ## Hard rules (from spec.md)
 
@@ -8,8 +8,18 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - All replays, forks and sims run in Node. The browser never calls `step`. It may only predict its own movement with `applyMovement`, for display (DECISIONS D16).
 - Never weaken or delete a test to make it pass. Tell Nipun why first.
 - No LLM calls anywhere. Clones are k-NN.
-- No VALORANT names or assets. The game is "Rewind Duel".
+- VALORANT names are now allowed: the hackathon granted attendees permission to copy from the game (DECISIONS D36). `spec.md` rule 1 still says otherwise; the team should update it.
 - Commit after each phase. Do not claim something works unless it was run.
+
+## Added since phase 1
+
+- `engine/weapons.ts` — the 18 VALORANT guns, shields, economy constants. `State.rules` is 'classic' (old matches, tests) or 'valorant' (all new live matches); it is saved in the match file so replays stay exact (D37). `fireCooldown` is in 1/100 ticks (D38).
+- `engine/nav.ts` — navigation grid and distance fields (`cachedField` is a shared bounded cache).
+- `server/ai.ts` — the AI (`AiPlayer`), `BasicBot` (the clone's fallback), ranks via `difficulty`. `server/belief.ts` is its probability map of the enemy; `server/brain.ts` what it learns about each player; `server/ranks.ts` the rank ladder.
+- `clone/` — k-NN clone (`knn.ts`), features from `observe()` only (`features.ts`), `GuardedClone` circuit breaker.
+- `rewind/` — rewind sessions (ghost, then clone), divergence, match summaries for the viewer, the what-if planner and coach moments. The planner runs in `server/whatif-worker.ts`.
+- `eval/` — evidence scripts: `npm run eval`, `eval:belief`, `eval:ranks`, `eval:reads`.
+- `web/view3d.ts` — first-person three.js view, loaded on V. It only draws; logic stays 2D.
 
 ## Where things live
 

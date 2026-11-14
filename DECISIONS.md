@@ -110,3 +110,106 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Why:** recordings, tests and the clones planned for Phase 3 all depend on the rules. Changing them now would cost more than it gains.
 - **Tradeoff:** the client only reveals what the server already sent it. Sound plays only for events this player is allowed to see, so there are no footsteps.
 - **Open:** audible footsteps (a running enemy within some range is "heard") would make walking matter beyond accuracy. It needs an engine change to `observe`, and it would change the fog-leak test's property, so it waits for a decision.
+
+## Phases 2 and 3: rewind and clones
+
+### D19. Two different "AIs", on purpose
+- **Chose:** the **adaptive AI** (`server/ai.ts` + `server/brain.ts`) plays *against* you and learns your habits to counter them (sites you favour, spots you kill it from, skill that moves +6 / −4.5 per round you win / lose). The **clone** (`clone/knn.ts`) plays *as* someone: it copies one real player's recorded decisions.
+- **Why:** they answer different questions. "Can I beat a bot that adapts to me?" vs "What if I had played that round differently against *that person*?"
+- **Tradeoff:** two systems to explain. The clone's fallback (`BasicBot`) is the adaptive AI with its learning switched off, so there is only one hand-written bot.
+- **Ruled out:** a single learned model for both. Spec rule 5 says kNN, and a kNN of you cannot also be tuned to beat you.
+
+### D20. The adaptive AI learns from the authoritative state, but plays from `observe()`
+- **Chose:** the `Trainer` watches the full server state after each tick (like a coach watching tape); the bot decides only from its own fogged observation.
+- **Why:** learning where you really stood is fair game after the fact; using it live would be wallhacks.
+- **Ruled out:** learning only from what the bot saw. Rounds where it never saw you would teach it nothing.
+
+### D21. Ghost first, clone after a divergence limit
+- **Chose:** `rewind/session.ts` replays the opponent's recorded inputs and steps the recorded match alongside; when `divergenceScore` passes 2.5 (or the recording runs out) a `GuardedClone` takes over and a `HANDOFF` line is logged with the number.
+- **Why:** for the first moments after a fork, the real recorded inputs are the most faithful opponent there is. They stop being faithful the moment you do something different.
+- **Tradeoff:** the score's weights (position/2, HP/25, +1.5 for a visibility flip) are a placeholder for the `TODO(human)` in `rewind/divergence.ts`.
+
+### D22. Breaker limit from held-out *blocks*, not single samples
+- **Chose:** the 95th-percentile limit is computed on a whole held-out match, or on whole 8-second blocks when there is only one match.
+- **Why:** decisions 4 ticks apart are nearly identical. Holding out every 10th sample gave a limit of 0.08 (each held-out moment had its twin in training), and the live breaker then tripped 67% of the time. Holding out whole blocks gave 0.23 and about 20%.
+- **Ruled out:** a hand-picked limit.
+
+### D23. Aim is learned relative to the enemy
+- **Chose:** the clone's aim action is an offset bucket from the direction to the enemy (or last seen position), or a compass direction when it has no idea; it is re-pointed every tick.
+- **Why:** absolute angles do not transfer between situations; "aim slightly left of where they are" does.
+
+### D24. Replay viewer frames are computed in Node
+- **Chose:** `GET /api/matches/:id` replays the match on the server and sends a frame every 2 ticks (~250 KB per match).
+- **Why:** spec rule 3, all replays run in Node. The browser only draws.
+
+### D25. No VALORANT map names
+- **Chose:** the extra maps are called Relay, Trident, Courtyard and Fault.
+- **Why:** spec hard rule 1. Their layouts are generic tactical-shooter ideas (no mid + teleporters, three sites, open courtyard, tight chokes).
+
+## Round 3: smarter AI, what-if, 3D
+
+### D26. A belief map instead of "last seen"
+- **Chose:** a Bayesian occupancy grid (`server/belief.ts`): predict (spread at run speed, weighted by the player's learned heat map), update (visible cells to zero, footsteps collapse, silence nearby lowers), collapse on sight.
+- **Why:** "last seen" forgets everything 3 seconds later. The grid keeps reasoning: you were not in the 60% of the map it just looked at, so you are in the other 40%.
+- **Evidence:** `npm run eval:belief`, belief on vs off at equal skill: 93-64 rounds, 16/20 matches.
+- **Tradeoff:** ~0.3 ms per bot per tick. The basic bot (the clone's fallback) has it switched off, so it stays the "simple bot" the spec asks for.
+
+### D27. Footsteps are an engine rule, not a client effect
+- **Chose:** `observe()` reports a running enemy within 14 units, snapped to a 2 by 2 cell, through walls.
+- **Why:** if only the client played a sound, the AI could not use it, and the human would have information the AI does not. Putting it in the observation keeps both sides fair and the fog rule in one place.
+
+### D28. Adaptive difficulty starts at 20 and moves on streaks
+- **Chose:** start 0.2; +0.07 per round won, −0.09 per round lost, ×1.5 per extra round of a streak (cap ×2.5). Saved brains from the old scheme keep what they learned but restart at 0.2.
+- **Why:** the first version started at 0.45 and moved 0.045 per round, so a new player lost several rounds before it eased off. Losing steps are bigger than winning ones so struggling players are helped first.
+
+### D29. What-if runs in a worker, shares the fork state
+- **Chose:** `rewind/whatif.ts` plays 20 scripted plans × 5 seeds (plus what really happened) in `server/whatif-worker.ts`. The fork state is replayed once and shared; path fields are cached process-wide.
+- **Why:** 100 futures took 14 s; replaying to the fork per future was most of it. Now ~5 s of simulation (~10 s with worker start-up and clone building), and a live match on the same server never stalls.
+- **Tradeoff:** plans are scripted, not learned; ranking ties break on kill speed.
+
+### D30. 3D is a view, not a new game
+- **Chose:** three.js renders the client's existing state from the player's eyes (`web/view3d.ts`), loaded only when V is pressed. W/A/S/D are turned relative to the view and snapped to the engine's 8 directions.
+- **Why:** spec phase 6: logic stays 2D. Replays, the AI and the server needed no change.
+- **Tradeoff:** movement snaps to 45 degrees in first person. `@types/three` is not installed, so three is typed loosely in one file.
+
+## Round 4: guns, ranks, reads, mirror, coach
+
+### D31. Weapons live in the engine, the old rifle is weapon 0
+- **Chose:** `engine/weapons.ts` with six guns; weapon 0 ("Standard") keeps the original numbers, so every old test and recording means the same thing. Buying is an input (`buy`) honoured only in the first 4 s of a round, so loadouts are recorded and replayed like any other input.
+- **Ruled out:** loadouts in the match file header. A second source of truth for replays.
+
+### D32. Headshots by geometry
+- **Chose:** a hit is a headshot when the bullet's line passes within 0.13 units of the centre (perpendicular distance). Spread and bloom push shots off centre.
+- **Why:** in top-down there is no head height; the centre is the only honest equivalent, and it makes aim quality (and the AI's rank) visible in damage.
+
+### D33. Your rank is where the adaptive AI settles
+- **Chose:** 25 rank steps over skill 0 to 1. The adaptive AI moves toward the level where you win about half your rounds, so its current level is your rank.
+- **Why:** no separate rating system to tune, and the rank means something concrete: "the AI at this level is your equal".
+- **Evidence:** `eval/rank-ladder.ts`. It caught two real bugs: burst control halved the fire rate (Platinum lost to Gold 40%), and the fix (burst only past 12 units, ~1.5° bloom budget) made every tier beat the one below.
+
+### D34. Calls are checked by the server, not claimed by the bot
+- **Chose:** the bot states one call per round from belief mass + side history; the server compares it to what the trainer saw the human do and logs `CALLED`/`MISREAD` with a running score.
+- **Why:** a bot grading itself would be meaningless. `eval/reads.ts` shows calls improving 0/1 → 5/5 over four matches against a habit-bound player.
+
+### D35. Mirror mode reuses the clone; the coach reuses the planner
+- **Chose:** "vs yourself" is `GuardedClone` of the human with their favourite loadout; the coach is the what-if worker run on the 3 seconds before each death, one job at a time.
+- **Tradeoff:** the coach's opponent is a clone of the AI built from its recorded games, not the live AI itself; with one match recorded that is a few hundred decisions and the breaker hands much of it to the basic bot.
+
+## Round 5: VALORANT names, armory and economy
+
+### D36. VALORANT names, with permission (supersedes D25 and spec hard rule 1)
+- **Chose:** real gun names and stats, rank names (Ascendant, Immortal, Radiant) and map names (Bind, Haven, Ascent, Split), because the hackathon grants attendees permission to copy from the game.
+- **Note:** `spec.md` still says "no VALORANT names"; update it if the team agrees, so the rule and the code match.
+- **Kept:** map ids (`relay`, `trident`, ...) so recordings and brains keep working; the layouts are our own small 1v1 versions.
+
+### D37. Rules are part of the match, not a server setting
+- **Chose:** `State.rules` ('classic' | 'valorant'), written to the match file (`rules`); files without it replay as classic. New live matches are VALORANT.
+- **Why:** an old recording must replay under the rules it was played with, or the hash breaks.
+
+### D38. Fire rate in 1/100 ticks
+- **Chose:** `fireCooldown` counts hundredths of a tick (Vandal 9.75/s = 328), carrying the remainder into the next shot only when you keep firing.
+- **Why:** at 32 ticks/s whole ticks can only give 10.7/s or 8/s for a Vandal. The legacy rifle (800) behaves exactly as before.
+
+### D39. The AI plays the economy
+- **Chose:** pistol rounds (Sheriff / Ghost + shields by rank), keep-and-top-up when it survived, full buy at 3900 (rifle + heavy shields, Operator sometimes on defence), force buy with 2000+, eco otherwise.
+- **Measured:** the first version saved at 2000-3900 like a real team would. In a first-to-5 match that threw rounds, and the rank ladder went flat (Bronze vs Iron 50%). Forcing, plus a steeper aim curve at the low end (`sqrt(skill)`), restored a clear ladder (53-71% for every step).
