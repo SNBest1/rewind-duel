@@ -6,3 +6,5 @@ export { getMap, type GameMap } from './map';
 export { angleDiff, canSee, observe, visibleEvents } from './vision';
 export { createMatch, step, hashState, applyMovement, type Mover } from './engine';
 export { replayMatch } from './replay';
+export { describeAction, type TraceRef, type TraceEvent } from './trace';
+export type { Policy } from './types';

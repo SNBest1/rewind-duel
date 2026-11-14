@@ -110,3 +110,29 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Why:** recordings, tests and the clones planned for Phase 3 all depend on the rules. Changing them now would cost more than it gains.
 - **Tradeoff:** the client only reveals what the server already sent it. Sound plays only for events this player is allowed to see, so there are no footsteps.
 - **Open:** audible footsteps (a running enemy within some range is "heard") would make walking matter beyond accuracy. It needs an engine change to `observe`, and it would change the fog-leak test's property, so it waits for a decision.
+
+## Phase 2 and 3
+
+### D19. The divergence score adds position drift, HP drift and a visibility flip, all in map units
+- **Chose:** `divergenceScore` = sum over both players of distance from the recorded position, plus sum of HP difference / 25, plus 2 if the opponent's sightline onto the human flipped vs the recording (`rewind/divergence.ts`). Limit 2.5.
+- **Why:** the three things the spec lists are on different scales, so each is converted to "map units": one bullet of HP (25) is worth ~1 unit, and a sightline flip is worth 2 because the recorded inputs were an answer to the old sightline and are now stale.
+- **Tradeoff:** the weights are hand-picked, not learned. They are readable and defensible in Q&A, which matters more here than being optimal.
+- **Ruled out:** a learned metric (no labels for "diverged"); normalizing by map diagonal (makes the number abstract and hard to explain).
+
+### D20. The clone copies a small discrete Action, not a raw Input
+- **Chose:** a decision is `{ move: 0..8, walk, aimBucket: 0..4, fire, smoke, dash, use }` (`clone/actions.ts`). The aim is stored as an offset from the enemy direction, in a few buckets, and rebuilt relative to the current enemy direction on replay.
+- **Why:** k neighbors come from different moments facing different ways. A relative, bucketed aim lets a decision recorded facing north be reused facing east, so neighbors actually combine instead of averaging to a meaningless angle.
+- **Tradeoff:** the clone cannot aim at a precise absolute angle, only at the enemy plus a coarse offset. With no enemy it holds its current aim.
+- **Ruled out:** copying the raw `Input.aim` (absolute angles from different moments average to nonsense); a continuous aim regression (that is a model, and the spec says clones are KNN).
+
+### D21. Features come only from `observe`, and the clone votes over k=7 distance-weighted neighbors
+- **Chose:** `extractFeatures` reads an `Observation` and nothing else (own state, visible-or-last-seen enemy relative position, 8 wall distances, zone one-hot, previous action). `KnnClone` takes the 7 nearest recorded moments and votes on an action weighted by `1/(dist+eps)` (`clone/features.ts`, `clone/knn.ts`).
+- **Why:** hard rule 5 — no LLM, clones are KNN. Building features from `observe` is what makes "the clone only knows what the person could see" true by construction, not by discipline (DECISIONS D8).
+- **Tradeoff:** a flat scan of a few thousand samples per decision. At 32 ticks/s sampling every 4 ticks that is 8 lookups/s per clone, fast enough; a kd-tree would help only at much larger data.
+- **Ruled out:** a trained classifier (not KNN, and a black box in Q&A); features that peek at the full `State` (would cheat the fog).
+
+### D22. The circuit-breaker limit is the p95 of nearest-neighbor distances on held-out data
+- **Chose:** `buildClone(name, { holdOut })` trains on every match of that player except the held-out ids, then sets the breaker to the 95th percentile of nearest-neighbor distances measured while replaying the held-out matches (`clone/build.ts`). Over the limit, `GuardedClone` hands off to `BasicBot` and logs a `BREAKER` line; under it, a `CLONE` line cites the neighbors.
+- **Why:** it is the spec's definition, and it is self-calibrating: a player with varied play has a looser limit than a repetitive one, measured on data the clone never saw so it reflects genuinely novel situations.
+- **Tradeoff:** needs at least one held-out match to be meaningful; with none held out it falls back to the p95 of the training data itself (tighter, but still a sane default for a standalone clone).
+- **Ruled out:** a fixed distance limit (meaningless across players and feature scalings); a confidence threshold on the vote (confidence can be high on a lone far neighbor, which is exactly the case the breaker must catch).

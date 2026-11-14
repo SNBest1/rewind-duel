@@ -1,0 +1,1 @@
+{ "name": "@rewind/eval", "version": "0.0.0", "private": true, "type": "module", "main": "run.ts", "dependencies": { "@rewind/engine": "^0.0.0", "@rewind/clone": "^0.0.0", "@rewind/rewind": "^0.0.0" } }

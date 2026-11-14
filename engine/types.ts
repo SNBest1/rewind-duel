@@ -87,6 +87,20 @@ export type Observation = {
   spike: Spike;
 };
 
+// Policy lives in the engine so the server (rewind), clone/ and eval/ all share one type,
+// and so a Policy can never import anything non-deterministic. Its TraceRef/TraceEvent are in trace.ts.
+export type { TraceRef, TraceEvent } from './trace';
+import type { TraceRef } from './trace';
+
+/**
+ * Anything that can drive a slot from what that slot is allowed to see.
+ * `act` gets an Observation (never the full State) so a Policy physically cannot cheat the fog.
+ */
+export interface Policy {
+  name: string;
+  act(obs: Observation): { input: Input; confidence: number; because: TraceRef[] };
+}
+
 export type MatchFile = {
   id: string;
   seed: number;

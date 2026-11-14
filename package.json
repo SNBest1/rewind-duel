@@ -5,7 +5,10 @@
   "workspaces": [
     "engine",
     "server",
-    "web"
+    "web",
+    "clone",
+    "rewind",
+    "eval"
   ],
   "engines": {
     "node": ">=20"
@@ -18,6 +21,8 @@
     "typecheck": "tsc --noEmit",
     "replay": "tsx server/replay.ts",
     "botmatch": "tsx scripts/botmatch.ts",
+    "whatif": "tsx rewind/whatif-cli.ts",
+    "eval": "tsx eval/run.ts",
     "check:determinism": "node scripts/check-determinism.mjs"
   },
   "devDependencies": {
