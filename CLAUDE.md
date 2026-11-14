@@ -1,4 +1,4 @@
-# Rewind — notes for the next Claude session
+# Rewind ΓÇö notes for the next Claude session
 
 Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the source of truth for scope and phases. `DECISIONS.md` logs every design choice with its tradeoff; add an entry for each new one. Phases 1 to 5 are done and the model is frozen (D47). Phase 6 is partly done: the three.js first-person view and a Unity viewer exist, and the Durable Object migration is deferred (D33).
 
@@ -8,23 +8,23 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - All replays, forks and sims run in Node. The browser never calls `step`. It may only predict its own movement with `applyMovement`, for display (DECISIONS D16).
 - Never weaken or delete a test to make it pass. Tell Nipun why first.
 - No LLM calls anywhere. Clones are k-NN.
-- No VALORANT names or assets. The game is "Rewind Duel".
+- VALORANT names are allowed on branch valorant-ai-bot: the hackathon granted attendees permission to copy from the game (DECISIONS D66). `spec.md` rule 1 still says otherwise; the team should settle it.
 - Commit after each phase. Do not claim something works unless it was run.
 
 ## Where things live
 
-- `engine/engine.ts` — `createMatch`, `step`, `hashState`. The order of operations inside a live tick is documented on `step` and matters for determinism: move both, timers, smokes, shots (simultaneous), deaths, spike, clock, then `lastSeen`.
-- `engine/vision.ts` — `canSee` is the single visibility rule. `observe` and `visibleEvents` are built on it. Anything a clone is allowed to know must come from `observe`, never from `State`.
-- `engine/constants.ts` — every tunable, in integer ticks.
-- `engine/map.ts` — the one map as data. Border walls sit just outside the 48x32 area so `rayWalls` is always finite.
-- `engine/replay.ts` — `replayMatch(file, untilTick)` rebuilds any tick. Rewind sessions, what-ifs and evals all fork from here.
-- `server/match.ts` — `MatchRunner`: engine plus input log, no sockets and no clock, so it is unit-testable.
-- `server/index.ts` — HTTP + WebSocket on one port: serves `web/dist` (if built) and runs rooms and the 32 Hz loop. The only place that touches wall-clock time. It may be exposed publicly through a Cloudflare Tunnel, so treat every client message as hostile (see DECISIONS D15).
-- `web/main.ts` — canvas client and DOM HUD. Input in, `Observation` out to pixels. Drawn positions chase their targets (`chase`) so 32 Hz updates look smooth.
-- `web/predict.ts` — `Predictor`: own-movement prediction from seq/ack. `server/match.ts` must apply exactly one queued input per tick or the prediction drifts (D17); `web/test/predict.test.ts` checks this against a real `MatchRunner`.
-- `web/audio.ts` — synthesized WebAudio cues, no asset files. `web/index.html` holds the palette tokens; `main.ts` repeats them as constants for the canvas.
-- `server/rewind.ts` — HTTP to list and fetch recorded matches, plus the WebSocket for rewind sessions. Mounted on the same port as the game.
-- `web/replay.ts` (`/replay.html`) — replay viewer, rewind controls and the what-if panel. `web/fpv.ts` (`/fpv.html`) is the three.js first-person view. `web/roster.html` shows who still needs games. All of them only draw server snapshots.
+- `engine/engine.ts` ΓÇö `createMatch`, `step`, `hashState`. The order of operations inside a live tick is documented on `step` and matters for determinism: move both, timers, smokes, shots (simultaneous), deaths, spike, clock, then `lastSeen`.
+- `engine/vision.ts` ΓÇö `canSee` is the single visibility rule. `observe` and `visibleEvents` are built on it. Anything a clone is allowed to know must come from `observe`, never from `State`.
+- `engine/constants.ts` ΓÇö every tunable, in integer ticks.
+- `engine/map.ts` ΓÇö the one map as data. Border walls sit just outside the 48x32 area so `rayWalls` is always finite.
+- `engine/replay.ts` ΓÇö `replayMatch(file, untilTick)` rebuilds any tick. Rewind sessions, what-ifs and evals all fork from here.
+- `server/match.ts` ΓÇö `MatchRunner`: engine plus input log, no sockets and no clock, so it is unit-testable.
+- `server/index.ts` ΓÇö HTTP + WebSocket on one port: serves `web/dist` (if built) and runs rooms and the 32 Hz loop. The only place that touches wall-clock time. It may be exposed publicly through a Cloudflare Tunnel, so treat every client message as hostile (see DECISIONS D15).
+- `web/main.ts` ΓÇö canvas client and DOM HUD. Input in, `Observation` out to pixels. Drawn positions chase their targets (`chase`) so 32 Hz updates look smooth.
+- `web/predict.ts` ΓÇö `Predictor`: own-movement prediction from seq/ack. `server/match.ts` must apply exactly one queued input per tick or the prediction drifts (D17); `web/test/predict.test.ts` checks this against a real `MatchRunner`.
+- `web/audio.ts` ΓÇö synthesized WebAudio cues, no asset files. `web/index.html` holds the palette tokens; `main.ts` repeats them as constants for the canvas.
+- `server/rewind.ts` ΓÇö HTTP to list and fetch recorded matches, plus the WebSocket for rewind sessions. Mounted on the same port as the game.
+- `web/replay.ts` (`/replay.html`) ΓÇö replay viewer, rewind controls and the what-if panel. `web/fpv.ts` (`/fpv.html`) is the three.js first-person view. `web/roster.html` shows who still needs games. All of them only draw server snapshots.
 
 ### Clones (`clone/`)
 
@@ -50,6 +50,18 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 
 - A renderer of JSON exported by `scripts/export-unity.ts`. It has no game logic (D48). See `unity/README.md`. The Editor rewrites `Packages/` and `ProjectSettings/` when it opens the project, so check those diffs before committing them.
 
+## Branch valorant-ai-bot: the live game and its AI
+
+Merged from a branch built in parallel with Phases 2 to 6. It does not replace main's `clone/`, `rewind/` or `eval/`; it sits beside them.
+
+- `engine/weapons.ts` — the 18 VALORANT guns, shields, economy constants. `State.rules` is 'classic' (every older recording, and the tests) or 'valorant' (new live matches); it is saved in the match file so replays stay exact (D67). `fireCooldown` is in 1/100 ticks (D68). `hashState` only adds the new fields when a state uses them, so classic recordings keep their old hashes.
+- `engine/map.ts` now holds five maps (ids `duel`, `relay`, `trident`, `courtyard`, `fault`; display names Duel, Bind, Haven, Ascent, Split). `engine/nav.ts` is the navigation grid (`cachedField` is a shared bounded cache). Flashbangs, teleporters and footsteps/gunshots (`Observation.heard`) are engine rules.
+- `server/ai.ts` — the live AI (`AiPlayer`) and `BasicBot`. `server/belief.ts` is its probability map of the enemy, `server/brain.ts` what it learns about each player (`data/brains/`), `server/ranks.ts` the rank ladder.
+- `ai/clone/`, `ai/rewind/` — this branch's own k-NN clone, ghost-then-clone rewind driver, match summaries, what-if planner (run in `server/whatif-worker.ts`) and coach moments. They use main's `rewind/divergence.ts`.
+- `server/index.ts` serves both: main's `/api/matches`, `/api/replay`, `/api/roster`, `/api/presets` and its `rewind`/`rwinput`/`retry`/`whatif` socket messages; this branch's `/api/viewer/*`, `/api/whatif`, `/api/coach/*`, `/api/version` and `join` modes `ai`, `mirror`, `rewind`.
+- `eval/belief-ablation.ts`, `rank-ladder.ts`, `reads.ts`, `clone-eval.ts` — this branch's evidence (`npm run eval:belief`, `eval:ranks`, `eval:reads`, `eval:live-clones`).
+- `web/view3d.ts` — first-person three.js view inside the live game, loaded on V.
+
 ## Non-obvious things
 
 - `State` is plain JSON-safe data and `step` never mutates its argument. Tests set up scenarios by teleporting players on a fresh `createMatch` state.
@@ -66,6 +78,6 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - `npm test`, `npm run typecheck`, `npm run check:determinism`
 - `npm run replay -- data/<id>.json`
 - `LAG_MS=60 npm run server` fakes a 120 ms round trip to test prediction.
-- `npm run botmatch` — two scripted bots play a full match through the real server; `TICK_MS=2` on the server fast-forwards it.
+- `npm run botmatch` ΓÇö two scripted bots play a full match through the real server; `TICK_MS=2` on the server fast-forwards it.
 - `npm run eval` (writes `eval/results.md`), `npm run whatif -- data/<id>.json <human 0|1> <forkTick>`, `npm run export:unity`
 - Replay viewer: `http://localhost:8080/replay.html` after `npm run build` + `npm run server`.

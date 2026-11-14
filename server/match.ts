@@ -1,4 +1,4 @@
-import { IDLE, createMatch, hashState, step, type GameEvent, type Input, type MatchFile, type Slot, type State } from '@rewind/engine';
+import { IDLE, createMatch, hashState, isBuyable, step, type GameEvent, type Input, type MatchFile, type Rules, type Slot, type State } from '@rewind/engine';
 
 /** Rebuilds a client-sent input from scratch so nothing malformed reaches the engine or the log. */
 export function sanitizeInput(raw: any): Input {
@@ -12,6 +12,10 @@ export function sanitizeInput(raw: any): Input {
     smoke: raw?.smoke === true,
     dash: raw?.dash === true,
     use: raw?.use === true,
+    flash: raw?.flash === true,
+    // Optional keys are left out unless valid, so a normal input logs exactly as it did before.
+    ...(Number.isInteger(raw?.buy) && (isBuyable(raw.buy) || raw.buy === 0) ? { buy: raw.buy as number } : {}),
+    ...(raw?.equip === 0 || raw?.equip === 1 ? { equip: raw.equip as 0 | 1 } : {}),
   };
 }
 
@@ -29,8 +33,14 @@ export class MatchRunner {
   /** Per slot, the client's sequence number of the input in force. Echoed back so the client can reconcile its prediction. */
   readonly acks: [number, number] = [0, 0];
 
-  constructor(readonly id: string, readonly seed: number, readonly names: [string, string]) {
-    this.state = createMatch(seed, 'duel');
+  /** @param initial start from this state instead of tick 0 (a rewind branch). Its log then starts at that tick. */
+  constructor(readonly id: string, readonly seed: number, readonly names: [string, string], mapId = 'duel', initial?: State, rules: Rules = 'classic') {
+    this.state = initial ?? createMatch(seed, mapId, rules);
+  }
+
+  /** The input log so far, delta-encoded. */
+  get inputLog(): MatchFile['inputs'] {
+    return this.log;
   }
 
   /**
@@ -76,6 +86,7 @@ export class MatchRunner {
       inputs: this.log,
       ticks: this.state.tick,
       finalHash: hashState(this.state),
+      rules: this.state.rules,
     };
   }
 }

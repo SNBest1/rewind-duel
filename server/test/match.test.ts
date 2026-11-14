@@ -26,7 +26,7 @@ describe('MatchRunner', () => {
 
   it('sanitizes malformed input', () => {
     expect(sanitizeInput({ move: { x: 9, y: 'a' }, aim: 'NaN', fire: 1 })).toEqual({
-      move: { x: 0, y: 0 }, walk: false, aim: 0, fire: false, reload: false, smoke: false, dash: false, use: false,
+      move: { x: 0, y: 0 }, walk: false, aim: 0, fire: false, reload: false, smoke: false, dash: false, use: false, flash: false,
     });
     expect(sanitizeInput(null).move).toEqual({ x: 0, y: 0 });
   });

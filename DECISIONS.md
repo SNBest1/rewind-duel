@@ -127,7 +127,7 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ### D21. Features come only from `observe`, and the clone votes over k=7 distance-weighted neighbors
 - **Chose:** `extractFeatures` reads an `Observation` and nothing else (own state, visible-or-last-seen enemy relative position, 8 wall distances, zone one-hot, previous action). `KnnClone` takes the 7 nearest recorded moments and votes on an action weighted by `1/(dist+eps)` (`clone/features.ts`, `clone/knn.ts`).
-- **Why:** hard rule 5 — no LLM, clones are KNN. Building features from `observe` is what makes "the clone only knows what the person could see" true by construction, not by discipline (DECISIONS D8).
+- **Why:** hard rule 5 ΓÇö no LLM, clones are KNN. Building features from `observe` is what makes "the clone only knows what the person could see" true by construction, not by discipline (DECISIONS D8).
 - **Tradeoff:** a flat scan of a few thousand samples per decision. At 32 ticks/s sampling every 4 ticks that is 8 lookups/s per clone, fast enough; a kd-tree would help only at much larger data.
 - **Ruled out:** a trained classifier (not KNN, and a black box in Q&A); features that peek at the full `State` (would cheat the fog).
 
@@ -141,13 +141,13 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ### D23. The rewind session runs on the server; the browser never simulates it
 - **Chose:** `openSession` rebuilds the fork state in Node, drives the opponent (ghost -> clone), and streams back the human's fogged `Observation` plus a both-sides snapshot and the trace (`server/rewind.ts`, `server/index.ts`). The replay viewer draws snapshots fetched from `/api/replay`; the rewind draws the server's observation. A rewind tick is a clean WebSocket round trip, no client prediction.
-- **Why:** hard rule 3 — every replay, fork and sim runs in the runtime that ran the live match. Running the fork in the browser would need the enemy's full state (which the fog forbids) and a second engine.
+- **Why:** hard rule 3 ΓÇö every replay, fork and sim runs in the runtime that ran the live match. Running the fork in the browser would need the enemy's full state (which the fog forbids) and a second engine.
 - **Tradeoff:** a rewind tick costs one round trip of input delay, unlike the live game which predicts own movement. Acceptable: a rewind is a deliberate, slow "what if", not a reflex duel.
 - **Ruled out:** predicting the rewind in the browser (breaks rule 3, needs enemy state).
 
 ### D24. The replay viewer may see both sides; live fog is untouched
 - **Chose:** `buildSnapshots` exposes both players' positions for the replay viewer, and the rewind stream includes the opponent's position. The live server's `observe` fog is unchanged.
-- **Why:** a replay is the player reviewing their own finished match after the fact — hiding the enemy from a post-match review would make it useless. The clone still only ever acts on `observe` (D21), so "the clone only knows what the person could see" stays true even though the viewer shows everything.
+- **Why:** a replay is the player reviewing their own finished match after the fact ΓÇö hiding the enemy from a post-match review would make it useless. The clone still only ever acts on `observe` (D21), so "the clone only knows what the person could see" stays true even though the viewer shows everything.
 - **Tradeoff:** the both-sides snapshot is a separate, wider payload than a live `Observation`. Only the replay/rewind path uses it, never a live match.
 
 ### D25. Each retry from the fork is a stored branch; the opponent clone holds out this very match
@@ -159,12 +159,12 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ### D26. Micro-plans are scripted named policies, not a search
 - **Chose:** about twenty hand-written plans (`rewind/plans.ts`), each a tiny function from the human's `Observation` to an `Input`: stop-and-shoot, back off to the nearest cover corner and hold or trade, smoke the angle then cross, dash out of the line four ways, walk quiet and hold an angle, rush the last-seen, fall back and reload. Each has a readable label.
-- **Why:** the spec names these exact ideas, and the point is advice a human can act on ("back off to cover and wait"), not an opaque optimum. Scripted plans also run in milliseconds, so 20 plans × 5 seeds is cheap.
+- **Why:** the spec names these exact ideas, and the point is advice a human can act on ("back off to cover and wait"), not an opaque optimum. Scripted plans also run in milliseconds, so 20 plans ├ù 5 seeds is cheap.
 - **Tradeoff:** the plans are a fixed menu, so the tool can only suggest what is on it. A plan that would have worked but is not scripted is never found.
 - **Ruled out:** a tree search or RL rollout over the raw action space (slow, and the result is not nameable advice); using the clone of the human as the plan (that is "what you did", not "what you could have done").
 
 ### D27. Rank by fight wins first, survival second, with shots landed as a tiebreak
-- **Chose:** each plan runs 5 times from the fork under different seeds (overwriting `State.rng`, D2) for 3 seconds against the opponent's guarded clone. `score = winRate + 0.3·survivalRate + 0.02·avgShotsLanded` (`rewind/whatif.ts`). The top 3 come back with a one-line reason read off the events ("won the fight every time, landing 3.0 shots").
+- **Chose:** each plan runs 5 times from the fork under different seeds (overwriting `State.rng`, D2) for 3 seconds against the opponent's guarded clone. `score = winRate + 0.3┬╖survivalRate + 0.02┬╖avgShotsLanded` (`rewind/whatif.ts`). The top 3 come back with a one-line reason read off the events ("won the fight every time, landing 3.0 shots").
 - **Why:** winning the duel is the goal; surviving without the kill is second best; shots landed separates two plans that both merely survive. Five seeds smooth out a single lucky spread roll without being slow.
 - **Tradeoff:** 3 seconds and 5 runs are short and few, so a plan whose payoff comes later (a slow rotate) is undervalued. The weights are hand-picked for readability over optimality.
 
@@ -178,7 +178,7 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 ### D29. Every metric is measured on held-out matches, and weak numbers are reported
 - **Chose:** `npm run eval` holds out one match per player, builds the clone from the rest, and reports clone accuracy, 1-second position error, handoff rate and a transfer test on the held-out match for three policies: the player's own clone, the basic bot, and a clone of a different player (`eval/run.ts`, `eval/metrics.ts`). Results go to `eval/results.md` as-is.
 - **Why:** the judge grades on evidence against a simpler baseline. Measuring on training data would be meaningless; the three-policy comparison is what shows the own clone is actually capturing the person, not just producing plausible inputs. The spec explicitly says report real numbers even if weak.
-- **What the numbers say (small dataset):** the bot clones reproduce their own player's move+fire choice 77–84% of the time vs 31% for the basic bot and ~43% for a cross-player clone, and land 1.1 units from the real path vs ~2.7 for the bot. The human (Nipun) clone is much weaker (23% both-match) — reported honestly; human play is noisier and the dataset is tiny.
+- **What the numbers say (small dataset):** the bot clones reproduce their own player's move+fire choice 77ΓÇô84% of the time vs 31% for the basic bot and ~43% for a cross-player clone, and land 1.1 units from the real path vs ~2.7 for the bot. The human (Nipun) clone is much weaker (23% both-match) ΓÇö reported honestly; human play is noisier and the dataset is tiny.
 - **Tradeoff:** fire-choice accuracy is inflated by the common "not firing" case, so move and fire are shown separately and "both" (the spec's measure) is the headline. Position error freezes the opponent so it measures the player's own path, not a diverging fight.
 
 ### D30. Position error freezes the opponent; the transfer test reconstructs "first / retries / fresh" from recordings
@@ -189,7 +189,7 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 ## Phase 6 (stretch)
 
 ### D31. The first-person view reads the same 2D snapshots; it holds no game logic
-- **Chose:** `web/fpv.html` + `web/fpv.ts` fetch a match's snapshots from `/api/replay` and draw them with three.js — walls extruded into boxes, players as cylinders, the camera at one player's eye along their aim (map x,y become world x,z). It scrubs and plays the recorded snapshots; it never calls `step` or `observe` (`web/fpv.ts`).
+- **Chose:** `web/fpv.html` + `web/fpv.ts` fetch a match's snapshots from `/api/replay` and draw them with three.js ΓÇö walls extruded into boxes, players as cylinders, the camera at one player's eye along their aim (map x,y become world x,z). It scrubs and plays the recorded snapshots; it never calls `step` or `observe` (`web/fpv.ts`).
 - **Why:** the spec says logic stays 2D. Reusing the replay payload means the 3D view is a pure renderer of the authoritative simulation, so it can never disagree with the 2D game or the clones.
 - **Tradeoff:** three.js adds ~530 KB to that page's bundle, so it is a separate entry loaded only when visited; the live game and replay viewer are unaffected.
 - **Not pixel-verified:** the WebGL render needs a real browser, which the sandbox could not open against localhost; the page serves, typechecks, bundles three.js, and the data pipeline (match list + snapshots) was confirmed over HTTP.
@@ -207,23 +207,23 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 ## Phase 5 revision (honest evidence)
 
 ### D34. Human matches are the result; bot matches are a labelled sanity check; fixtures are dropped
-- **Chose:** `eval/run.ts` splits the dataset with `isBotMatch` (both players `bot-*`). Human clones are the headline table; bot clones are a separate table labelled "sanity check only — NOT the main result". The alpha/bravo and p1/p2 fixtures are dropped (`DROP_PLAYERS`): pub1 is 160 ticks, t1 is one player barely moving, tunneltest is 100 ticks — none are skill data.
-- **Why:** scripted bots are perfectly repeatable, so their clones score 77–84% and would flatter the result if mixed in. The judge grades on cloning a real person, so that number must stand alone and be honest about being thin.
+- **Chose:** `eval/run.ts` splits the dataset with `isBotMatch` (both players `bot-*`). Human clones are the headline table; bot clones are a separate table labelled "sanity check only ΓÇö NOT the main result". The alpha/bravo and p1/p2 fixtures are dropped (`DROP_PLAYERS`): pub1 is 160 ticks, t1 is one player barely moving, tunneltest is 100 ticks ΓÇö none are skill data.
+- **Why:** scripted bots are perfectly repeatable, so their clones score 77ΓÇô84% and would flatter the result if mixed in. The judge grades on cloning a real person, so that number must stand alone and be honest about being thin.
 - **Tradeoff:** after dropping fixtures, only one human (Nipun) has two or more matches, and one of those is a self-match. The eval says so plainly rather than padding the table.
 
 ### D35. Majority-action baseline, and move/fire reported separately
 - **Chose:** added `MajorityBaseline` (always that player's single most common action) beside the basic bot and cross clone. Accuracy reports move-direction match and fire match as separate columns, plus 1-second position error.
 - **Why:** fire is dominated by "not firing" (both the person and any policy mostly hold fire), so a combined score hides whether the clone captures *movement*. Move match is the discriminating signal. The majority baseline is the real floor: a clone that cannot beat "always do your most common thing" is only learning the habit, not the situation.
-- **What it showed (honest):** Nipun's own clone did NOT beat the baselines — majority action matched moves 31% vs the clone's 29%, and landed closer in position. Reported as-is; the "Honest read" section says why (tiny, noisy human data; few neighbors; a mostly-still player is easy to match).
+- **What it showed (honest):** Nipun's own clone did NOT beat the baselines ΓÇö majority action matched moves 31% vs the clone's 29%, and landed closer in position. Reported as-is; the "Honest read" section says why (tiny, noisy human data; few neighbors; a mostly-still player is easy to match).
 
 ### D36. Learning curve plus an SVG chart, on the same held-out match as the table
 - **Chose:** `eval/learning-curve.ts` trains on 1, 2, 3, ... of a player's matches (holding out the FIRST match, the same one section 1 uses) and plots move-match accuracy, as a self-contained SVG (`eval/learning-curve.svg`) for the video.
 - **Why:** the curve is the argument that more games help, which matters when the current human numbers are weak. Holding out the same match keeps the curve's endpoint consistent with the accuracy table.
-- **What it showed:** bots climb with data (bot-two 43% -> 58% -> 78% move match); Nipun is flat at ~30% across 1–2 matches — the honest signal that he needs more, varied games.
+- **What it showed:** bots climb with data (bot-two 43% -> 58% -> 78% move match); Nipun is flat at ~30% across 1ΓÇô2 matches ΓÇö the honest signal that he needs more, varied games.
 
 ### D37. The what-if search is audited and reported as a spread with a clone-fire caveat
 - **Chose:** `eval/whatif-audit.ts` proves fog holds by moving the hidden enemy off-sightline and checking every plan's and the clone's decision is unchanged (they see only `observe`). It confirms the clone CAN fire head-on. It then runs the what-if on 12 forks across the human matches and reports the spread (min/median/max), not one fork, plus the clone's fire rate when it could see the human.
-- **Why:** a single fork is cherry-picking. And a plan "winning" against a clone that never shoots is not evidence the plan is good — so the clone's fire-when-seen rate is reported as the caveat it is.
+- **Why:** a single fork is cherry-picking. And a plan "winning" against a clone that never shoots is not evidence the plan is good ΓÇö so the clone's fire-when-seen rate is reported as the caveat it is.
 - **What it showed (honest):** best-plan win rate median 100%, but the clone fired on only ~32% of ticks it could see the human. The per-fork table shows forks where the clone saw the human 20+ ticks and fired zero. The win rate is partly the clone's passivity (its training data had little firing), not plan quality. More recorded human games where the person shoots would fix it; the breaker's basic bot does shoot, so the head-on audit still passes.
 
 ### D38. A roster page shows who still needs games
@@ -234,16 +234,16 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ### D39. Self-matches are excluded from training and eval, and flagged
 - **Chose:** `isSelfMatch` (same name on both slots) marks a match as not a real duel. `buildClone` never trains on one; the eval drops them from the usable set and prints which were excluded; the roster counts real duels and shows "(+N self excluded)".
-- **Why:** a self-match is one person controlling both sides — it is not opponent data and would teach a clone to play against itself. Nipun's third "match" was a self-match, which had been inflating his count.
+- **Why:** a self-match is one person controlling both sides ΓÇö it is not opponent data and would teach a clone to play against itself. Nipun's third "match" was a self-match, which had been inflating his count.
 - **Effect:** after exclusion, Nipun has 2 real matches (not 3); the headline honestly rests on 2.
 
 ### D40. Metrics are locked in eval/METRICS.md before new data arrives
 - **Chose:** `eval/metrics-doc.ts` writes `eval/METRICS.md` with the fixed definition of every metric, and the eval computes exactly those. Raw metrics (move match, fire match, position error) are kept; new metrics are added beside them, never replacing them.
 - **Why:** the user asked to lock definitions so numbers mean the same thing as more games arrive. A silent redefinition would make old and new runs incomparable.
-- **New metrics:** balanced move accuracy (mean per-class recall over the 9 move options — cannot be gamed by holding still); fire precision and recall on VISIBLE-enemy ticks only (where firing is a real choice); position error on moved-only moments (where the person actually moved).
+- **New metrics:** balanced move accuracy (mean per-class recall over the 9 move options ΓÇö cannot be gamed by holding still); fire precision and recall on VISIBLE-enemy ticks only (where firing is a real choice); position error on moved-only moments (where the person actually moved).
 
 ### D41. The clone is factored: separate move / aim / fire votes, fire restricted to same-visibility neighbors
-- **Chose:** `FactoredClone` runs one k-NN neighborhood, then three distance-weighted votes — move (9 classes), aim bucket, and fire. The fire vote uses only neighbors whose recorded enemy-visibility matches the current tick; with none, it defaults to not firing.
+- **Chose:** `FactoredClone` runs one k-NN neighborhood, then three distance-weighted votes ΓÇö move (9 classes), aim bucket, and fire. The fire vote uses only neighbors whose recorded enemy-visibility matches the current tick; with none, it defaults to not firing.
 - **Why:** the joint clone voted on one combined action id, so rare combinations split the k neighbors into singletons and fire almost never won. Separating the votes lets each field draw on all k neighbors, and conditioning fire on visibility is the honest model: "do I shoot" depends on whether an enemy is in sight.
 - **Effect (held-out, real):** fire recall on visible ticks rose to 79% (majority baseline fires 0%), and balanced move 14% now edges the baselines (majority 11%, cross 12%). It is still pure k-NN (hard rule 5). The clone is shown breaker OFF and ON; the breaker fired on 5% of ticks.
 - **Honest caveat it exposed:** in the what-if rollout the clone drives its own movement into positions unlike its training, so its fire-when-seen there is only ~19% (vs the basic bot's 85%). Reported, not hidden.
@@ -256,15 +256,15 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** `GET /api/roster` recomputes match-per-player counts from `data/` on every request (no cache); `web/roster.html` polls it every 4 s and draws bars. `eval/roster.md` remains the static snapshot written each eval run.
 - **Why:** the user wants to watch counts climb as people play. The live page needs no eval re-run; a finished match lands in `data/` and shows up within one poll.
 
-## Phase 5 revision 3 (fire gap, bootstrap CIs, demo presets) — MODEL FROZEN after this
+## Phase 5 revision 3 (fire gap, bootstrap CIs, demo presets) ΓÇö MODEL FROZEN after this
 
 ### D44. The fire gap was a missing decision-hold in the live paths, not a passive clone
-- **Diagnosis:** the eval measures the clone at decision ticks (every 4) on the real replayed positions and got 79% fire recall; the what-if and rewind called the clone EVERY tick and on self-driven positions, so a fire decision never persisted across its 4-tick window and the clone drifted off-distribution. Checked all three of the user's hypotheses: (a) both live paths do use the factored clone (confirmed); (b) the fire action did NOT hold across the 4 ticks (the bug); (c) aim/reload/breaker do not block firing — reload only triggers at ammo 0, the breaker fires on 5% of ticks, and a head-on engagement shows the clone firing 60% of visible ticks.
+- **Diagnosis:** the eval measures the clone at decision ticks (every 4) on the real replayed positions and got 79% fire recall; the what-if and rewind called the clone EVERY tick and on self-driven positions, so a fire decision never persisted across its 4-tick window and the clone drifted off-distribution. Checked all three of the user's hypotheses: (a) both live paths do use the factored clone (confirmed); (b) the fire action did NOT hold across the 4 ticks (the bug); (c) aim/reload/breaker do not block firing ΓÇö reload only triggers at ammo 0, the breaker fires on 5% of ticks, and a head-on engagement shows the clone firing 60% of visible ticks.
 - **Fix:** `HoldingPolicy` (clone/holding.ts) wraps any policy, decides every `DECISION_INTERVAL` ticks and replays the held input between, phased on `obs.tick` so it matches the eval's sampling. Wired into the what-if (`simulateOnce`), the rewind session, and the audit's fire counter.
-- **Honest result:** head-on fire-when-seen ~60% (close to the 79% eval recall); the aggregate what-if rose 19% -> 22%. The remaining gap is NOT a bug — the dodging micro-plans pull the clone into oblique, off-distribution positions where it has few same-visibility neighbors. A live test (`eval/test/fire-gap.test.ts`) runs the clone through a scripted engagement and asserts its fire rate is within 25 points of its eval recall, so a real regression in the live fire path fails CI.
+- **Honest result:** head-on fire-when-seen ~60% (close to the 79% eval recall); the aggregate what-if rose 19% -> 22%. The remaining gap is NOT a bug ΓÇö the dodging micro-plans pull the clone into oblique, off-distribution positions where it has few same-visibility neighbors. A live test (`eval/test/fire-gap.test.ts`) runs the clone through a scripted engagement and asserts its fire rate is within 25 points of its eval recall, so a real regression in the live fire path fails CI.
 
 ### D45. 95% bootstrap confidence intervals, resampling by ROUND not by tick
-- **Chose:** metrics are rebuilt from a per-decision `DecisionRecord` tagged with its round. `bootstrapByRound` resamples whole rounds with replacement (1000x, seeded for reproducibility) and takes the 2.5/97.5 percentiles. Every metric in results.md shows `point [lo–hi]`.
+- **Chose:** metrics are rebuilt from a per-decision `DecisionRecord` tagged with its round. `bootstrapByRound` resamples whole rounds with replacement (1000x, seeded for reproducibility) and takes the 2.5/97.5 percentiles. Every metric in results.md shows `point [loΓÇôhi]`.
 - **Why by round:** ticks inside a round are one correlated sequence (the same positions, the same fight), so resampling ticks would pretend there is far more independent data than there is and give fake-tight intervals. A round is the independent unit.
 - **What it showed:** with 5 rounds the human CIs are wide and mostly overlap. The honest read now states, per comparison, whether two CIs separate: Nipun's balanced-move win over majority separates (majority has zero variance), the win over cross-clone OVERLAPS, and the fire-recall win over majority separates. So only the fire-recall improvement is statistically real at this sample size; the rest is directional until 3+ matches.
 
@@ -277,8 +277,115 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ## Unity 3D viewer
 
-### D48. Unity is a renderer of exported snapshots, built from the CLI — not a second engine
+### D48. Unity is a renderer of exported snapshots, built from the CLI ΓÇö not a second engine
 - **Chose:** a Unity project (`unity/RewindDuel3D`, URP, editor `6000.6.9f1`) scaffolded and driven entirely from the `unity` CLI. `npm run export:unity` writes `map.json` (walls/sites from `engine/map.ts`) and `match.json` (`buildSnapshots` of a recorded match) into `Assets/StreamingAssets/`. C# (`MapBuilder`, `MatchReplay`) builds the 3D world and animates both players + a first-person camera from those snapshots. An editor script (`SceneBuilder`) generates the scene headless via `unity run -- -executeMethod`.
-- **Why:** same reasoning as the three.js FPV (D31) and hard rule 3 — the Node engine is the one deterministic source of truth. Re-implementing movement/vision/clone in C# would be a second engine that could drift from the recordings and the evals. Unity consumes the exact same snapshot payload the replay viewer uses, so it can never disagree.
-- **Verified in-session, headless:** the scene built with zero `error CS`, and a `StandaloneOSX` player built successfully (77 MB app, `map.json`+`match.json` shipped in `Contents/Resources/Data/StreamingAssets`). Could NOT screenshot the live render — the sandbox has no display — so the visual frame is unverified; the user presses Play to see it.
+- **Why:** same reasoning as the three.js FPV (D31) and hard rule 3 ΓÇö the Node engine is the one deterministic source of truth. Re-implementing movement/vision/clone in C# would be a second engine that could drift from the recordings and the evals. Unity consumes the exact same snapshot payload the replay viewer uses, so it can never disagree.
+- **Verified in-session, headless:** the scene built with zero `error CS`, and a `StandaloneOSX` player built successfully (77 MB app, `map.json`+`match.json` shipped in `Contents/Resources/Data/StreamingAssets`). Could NOT screenshot the live render ΓÇö the sandbox has no display ΓÇö so the visual frame is unverified; the user presses Play to see it.
 - **Tradeoff / ruled out:** no live WebSocket link and no clone in Unity. Driving a live rewind stays in Node (`server/` + `web/replay.html`); Unity is for 3D replay/presentation. The CLI lists five editor versions but only `6000.6.9f1` is installed on disk, so the project is pinned to it.
+
+## Branch valorant-ai-bot (merged with main)
+
+Built in parallel with main's Phases 2 to 6 from the Phase 2 scaffold, then merged. These modules live in `ai/` (live AI, its own clone/rewind/what-if/coach) and `server/` (ai, belief, brain, ranks); main's `clone/`, `rewind/` and `eval/` packages are unchanged. The divergence score is main's (D19).
+
+### Rewind and clones (this branch)
+
+### D49. Two different "AIs", on purpose
+- **Chose:** the **adaptive AI** (`server/ai.ts` + `server/brain.ts`) plays *against* you and learns your habits to counter them (sites you favour, spots you kill it from, skill that moves +6 / ΓêÆ4.5 per round you win / lose). The **clone** (`clone/knn.ts`) plays *as* someone: it copies one real player's recorded decisions.
+- **Why:** they answer different questions. "Can I beat a bot that adapts to me?" vs "What if I had played that round differently against *that person*?"
+- **Tradeoff:** two systems to explain. The clone's fallback (`BasicBot`) is the adaptive AI with its learning switched off, so there is only one hand-written bot.
+- **Ruled out:** a single learned model for both. Spec rule 5 says kNN, and a kNN of you cannot also be tuned to beat you.
+
+### D50. The adaptive AI learns from the authoritative state, but plays from `observe()`
+- **Chose:** the `Trainer` watches the full server state after each tick (like a coach watching tape); the bot decides only from its own fogged observation.
+- **Why:** learning where you really stood is fair game after the fact; using it live would be wallhacks.
+- **Ruled out:** learning only from what the bot saw. Rounds where it never saw you would teach it nothing.
+
+### D51. Ghost first, clone after a divergence limit
+- **Chose:** `rewind/session.ts` replays the opponent's recorded inputs and steps the recorded match alongside; when `divergenceScore` passes 2.5 (or the recording runs out) a `GuardedClone` takes over and a `HANDOFF` line is logged with the number.
+- **Why:** for the first moments after a fork, the real recorded inputs are the most faithful opponent there is. They stop being faithful the moment you do something different.
+- **Tradeoff:** the score's weights (position/2, HP/25, +1.5 for a visibility flip) are a placeholder for the `TODO(human)` in `rewind/divergence.ts`.
+
+### D52. Breaker limit from held-out *blocks*, not single samples
+- **Chose:** the 95th-percentile limit is computed on a whole held-out match, or on whole 8-second blocks when there is only one match.
+- **Why:** decisions 4 ticks apart are nearly identical. Holding out every 10th sample gave a limit of 0.08 (each held-out moment had its twin in training), and the live breaker then tripped 67% of the time. Holding out whole blocks gave 0.23 and about 20%.
+- **Ruled out:** a hand-picked limit.
+
+### D53. Aim is learned relative to the enemy
+- **Chose:** the clone's aim action is an offset bucket from the direction to the enemy (or last seen position), or a compass direction when it has no idea; it is re-pointed every tick.
+- **Why:** absolute angles do not transfer between situations; "aim slightly left of where they are" does.
+
+### D54. Replay viewer frames are computed in Node
+- **Chose:** `GET /api/matches/:id` replays the match on the server and sends a frame every 2 ticks (~250 KB per match).
+- **Why:** spec rule 3, all replays run in Node. The browser only draws.
+
+### D55. No VALORANT map names
+- **Chose:** the extra maps are called Relay, Trident, Courtyard and Fault.
+- **Why:** spec hard rule 1. Their layouts are generic tactical-shooter ideas (no mid + teleporters, three sites, open courtyard, tight chokes).
+
+## Round 3: smarter AI, what-if, 3D
+
+### D56. A belief map instead of "last seen"
+- **Chose:** a Bayesian occupancy grid (`server/belief.ts`): predict (spread at run speed, weighted by the player's learned heat map), update (visible cells to zero, footsteps collapse, silence nearby lowers), collapse on sight.
+- **Why:** "last seen" forgets everything 3 seconds later. The grid keeps reasoning: you were not in the 60% of the map it just looked at, so you are in the other 40%.
+- **Evidence:** `npm run eval:belief`, belief on vs off at equal skill: 93-64 rounds, 16/20 matches.
+- **Tradeoff:** ~0.3 ms per bot per tick. The basic bot (the clone's fallback) has it switched off, so it stays the "simple bot" the spec asks for.
+
+### D57. Footsteps are an engine rule, not a client effect
+- **Chose:** `observe()` reports a running enemy within 14 units, snapped to a 2 by 2 cell, through walls.
+- **Why:** if only the client played a sound, the AI could not use it, and the human would have information the AI does not. Putting it in the observation keeps both sides fair and the fog rule in one place.
+
+### D58. Adaptive difficulty starts at 20 and moves on streaks
+- **Chose:** start 0.2; +0.07 per round won, ΓêÆ0.09 per round lost, ├ù1.5 per extra round of a streak (cap ├ù2.5). Saved brains from the old scheme keep what they learned but restart at 0.2.
+- **Why:** the first version started at 0.45 and moved 0.045 per round, so a new player lost several rounds before it eased off. Losing steps are bigger than winning ones so struggling players are helped first.
+
+### D59. What-if runs in a worker, shares the fork state
+- **Chose:** `rewind/whatif.ts` plays 20 scripted plans ├ù 5 seeds (plus what really happened) in `server/whatif-worker.ts`. The fork state is replayed once and shared; path fields are cached process-wide.
+- **Why:** 100 futures took 14 s; replaying to the fork per future was most of it. Now ~5 s of simulation (~10 s with worker start-up and clone building), and a live match on the same server never stalls.
+- **Tradeoff:** plans are scripted, not learned; ranking ties break on kill speed.
+
+### D60. 3D is a view, not a new game
+- **Chose:** three.js renders the client's existing state from the player's eyes (`web/view3d.ts`), loaded only when V is pressed. W/A/S/D are turned relative to the view and snapped to the engine's 8 directions.
+- **Why:** spec phase 6: logic stays 2D. Replays, the AI and the server needed no change.
+- **Tradeoff:** movement snaps to 45 degrees in first person. `@types/three` is not installed, so three is typed loosely in one file.
+
+## Round 4: guns, ranks, reads, mirror, coach
+
+### D61. Weapons live in the engine, the old rifle is weapon 0
+- **Chose:** `engine/weapons.ts` with six guns; weapon 0 ("Standard") keeps the original numbers, so every old test and recording means the same thing. Buying is an input (`buy`) honoured only in the first 4 s of a round, so loadouts are recorded and replayed like any other input.
+- **Ruled out:** loadouts in the match file header. A second source of truth for replays.
+
+### D62. Headshots by geometry
+- **Chose:** a hit is a headshot when the bullet's line passes within 0.13 units of the centre (perpendicular distance). Spread and bloom push shots off centre.
+- **Why:** in top-down there is no head height; the centre is the only honest equivalent, and it makes aim quality (and the AI's rank) visible in damage.
+
+### D63. Your rank is where the adaptive AI settles
+- **Chose:** 25 rank steps over skill 0 to 1. The adaptive AI moves toward the level where you win about half your rounds, so its current level is your rank.
+- **Why:** no separate rating system to tune, and the rank means something concrete: "the AI at this level is your equal".
+- **Evidence:** `eval/rank-ladder.ts`. It caught two real bugs: burst control halved the fire rate (Platinum lost to Gold 40%), and the fix (burst only past 12 units, ~1.5┬░ bloom budget) made every tier beat the one below.
+
+### D64. Calls are checked by the server, not claimed by the bot
+- **Chose:** the bot states one call per round from belief mass + side history; the server compares it to what the trainer saw the human do and logs `CALLED`/`MISREAD` with a running score.
+- **Why:** a bot grading itself would be meaningless. `eval/reads.ts` shows calls improving 0/1 ΓåÆ 5/5 over four matches against a habit-bound player.
+
+### D65. Mirror mode reuses the clone; the coach reuses the planner
+- **Chose:** "vs yourself" is `GuardedClone` of the human with their favourite loadout; the coach is the what-if worker run on the 3 seconds before each death, one job at a time.
+- **Tradeoff:** the coach's opponent is a clone of the AI built from its recorded games, not the live AI itself; with one match recorded that is a few hundred decisions and the breaker hands much of it to the basic bot.
+
+## Round 5: VALORANT names, armory and economy
+
+### D66. VALORANT names, with permission (supersedes spec hard rule 1)
+- **Chose:** real gun names and stats, rank names (Ascendant, Immortal, Radiant) and map names (Bind, Haven, Ascent, Split), because the hackathon grants attendees permission to copy from the game.
+- **Note:** `spec.md` still says "no VALORANT names"; update it if the team agrees, so the rule and the code match.
+- **Kept:** map ids (`relay`, `trident`, ...) so recordings and brains keep working; the layouts are our own small 1v1 versions.
+
+### D67. Rules are part of the match, not a server setting
+- **Chose:** `State.rules` ('classic' | 'valorant'), written to the match file (`rules`); files without it replay as classic. New live matches are VALORANT.
+- **Why:** an old recording must replay under the rules it was played with, or the hash breaks.
+
+### D68. Fire rate in 1/100 ticks
+- **Chose:** `fireCooldown` counts hundredths of a tick (Vandal 9.75/s = 328), carrying the remainder into the next shot only when you keep firing.
+- **Why:** at 32 ticks/s whole ticks can only give 10.7/s or 8/s for a Vandal. The legacy rifle (800) behaves exactly as before.
+
+### D69. The AI plays the economy
+- **Chose:** pistol rounds (Sheriff / Ghost + shields by rank), keep-and-top-up when it survived, full buy at 3900 (rifle + heavy shields, Operator sometimes on defence), force buy with 2000+, eco otherwise.
+- **Measured:** the first version saved at 2000-3900 like a real team would. In a first-to-5 match that threw rounds, and the rank ladder went flat (Bronze vs Iron 50%). Forcing, plus a steeper aim curve at the low end (`sqrt(skill)`), restored a clear ladder (53-71% for every step).

@@ -3,7 +3,7 @@ import { IDLE, type Input, type MatchFile, type State } from './types';
 
 /** Rebuilds the state at `untilTick` (default: the end) from a match file's seed and input log. */
 export function replayMatch(file: MatchFile, untilTick: number = file.ticks): State {
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic');
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   while (s.tick < untilTick) {
