@@ -11,7 +11,7 @@ import {
   IDLE, createMatch, replayMatch, step,
   observe, type GameEvent, type Input, type MatchFile, type Observation, type Policy, type Slot, type State, type TraceEvent,
 } from '@rewind/engine';
-import { GuardedClone } from '@rewind/clone';
+import { GuardedClone, HoldingPolicy } from '@rewind/clone';
 import { DIVERGENCE_LIMIT, divergenceScore } from './divergence';
 
 export type SessionMode = 'ghost' | 'clone';
@@ -49,6 +49,7 @@ export class RewindSession {
   readonly trace: TraceEvent[] = [];
   private readonly oppInputs: Map<number, Input>;
   private lastOppInput: Input = IDLE;
+  private readonly heldClone: HoldingPolicy; // the clone, decided every 4 ticks and held between
   private branchId = 0;
   readonly branches: BranchOutcome[] = [];
 
@@ -70,6 +71,7 @@ export class RewindSession {
     this.forkTick = forkTick;
     this.oppInputs = recordedInputs(file, this.opponent);
     this.clone.attach((e) => this.trace.push(e), this.opponent);
+    this.heldClone = new HoldingPolicy(this.clone);
     this.state = replayMatch(file, forkTick);
     // Seed the opponent's "held" input with whatever was in force at the fork tick.
     this.lastOppInput = this.inputAt(forkTick);
@@ -120,8 +122,9 @@ export class RewindSession {
     if (this.mode === 'ghost') {
       oppInput = this.lastOppInput;
     } else {
-      // The clone (and its breaker) decides from the opponent's observation only.
-      oppInput = this.clone.act(observe(this.state, this.opponent)).input;
+      // The clone (and its breaker) decides from the opponent's observation only, every 4 ticks, holding
+      // the action between decisions (the held wrapper) so a fire decision persists across its window.
+      oppInput = this.heldClone.act(observe(this.state, this.opponent)).input;
     }
 
     const inputs: [Input, Input] = [IDLE, IDLE];
@@ -178,5 +181,6 @@ export class RewindSession {
     this.handoffTick = null;
     this.trace.length = 0;
     this.lastOppInput = this.inputAt(this.forkTick);
+    this.heldClone.reset();
   }
 }

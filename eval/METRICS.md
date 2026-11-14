@@ -4,6 +4,11 @@ These definitions are fixed as of 2026-11-14 and must not change. Every number i
 is computed exactly as written here. Raw metrics (kept from the first version) and new metrics are
 reported side by side so old runs stay comparable.
 
+**MODEL FROZEN (2026-11-14).** The clone and the metrics are frozen. From here only bug fixes and
+re-running `npm run eval` as new human matches arrive — no new features, no metric redefinitions.
+Every metric is reported with a 95% bootstrap confidence interval, resampling by ROUND (ticks within a
+round are correlated, so the round is the independent unit).
+
 ## Data rules (apply to every metric)
 
 - **Held-out:** a clone is always tested on a match it did NOT train on.

@@ -255,3 +255,22 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 ### D43. The roster page refreshes live from the server
 - **Chose:** `GET /api/roster` recomputes match-per-player counts from `data/` on every request (no cache); `web/roster.html` polls it every 4 s and draws bars. `eval/roster.md` remains the static snapshot written each eval run.
 - **Why:** the user wants to watch counts climb as people play. The live page needs no eval re-run; a finished match lands in `data/` and shows up within one poll.
+
+## Phase 5 revision 3 (fire gap, bootstrap CIs, demo presets) — MODEL FROZEN after this
+
+### D44. The fire gap was a missing decision-hold in the live paths, not a passive clone
+- **Diagnosis:** the eval measures the clone at decision ticks (every 4) on the real replayed positions and got 79% fire recall; the what-if and rewind called the clone EVERY tick and on self-driven positions, so a fire decision never persisted across its 4-tick window and the clone drifted off-distribution. Checked all three of the user's hypotheses: (a) both live paths do use the factored clone (confirmed); (b) the fire action did NOT hold across the 4 ticks (the bug); (c) aim/reload/breaker do not block firing — reload only triggers at ammo 0, the breaker fires on 5% of ticks, and a head-on engagement shows the clone firing 60% of visible ticks.
+- **Fix:** `HoldingPolicy` (clone/holding.ts) wraps any policy, decides every `DECISION_INTERVAL` ticks and replays the held input between, phased on `obs.tick` so it matches the eval's sampling. Wired into the what-if (`simulateOnce`), the rewind session, and the audit's fire counter.
+- **Honest result:** head-on fire-when-seen ~60% (close to the 79% eval recall); the aggregate what-if rose 19% -> 22%. The remaining gap is NOT a bug — the dodging micro-plans pull the clone into oblique, off-distribution positions where it has few same-visibility neighbors. A live test (`eval/test/fire-gap.test.ts`) runs the clone through a scripted engagement and asserts its fire rate is within 25 points of its eval recall, so a real regression in the live fire path fails CI.
+
+### D45. 95% bootstrap confidence intervals, resampling by ROUND not by tick
+- **Chose:** metrics are rebuilt from a per-decision `DecisionRecord` tagged with its round. `bootstrapByRound` resamples whole rounds with replacement (1000x, seeded for reproducibility) and takes the 2.5/97.5 percentiles. Every metric in results.md shows `point [lo–hi]`.
+- **Why by round:** ticks inside a round are one correlated sequence (the same positions, the same fight), so resampling ticks would pretend there is far more independent data than there is and give fake-tight intervals. A round is the independent unit.
+- **What it showed:** with 5 rounds the human CIs are wide and mostly overlap. The honest read now states, per comparison, whether two CIs separate: Nipun's balanced-move win over majority separates (majority has zero variance), the win over cross-clone OVERLAPS, and the fire-recall win over majority separates. So only the fire-recall improvement is statistically real at this sample size; the rest is directional until 3+ matches.
+
+### D46. Three named demo presets for repeatable video takes
+- **Chose:** `rewind/presets.ts` defines three fixed forks from three different human matches against three different opponents (Supra, Pratul, Pratul Saini), each chosen (an offline scan) because the opponent clone sees the player >= ~8 ticks and fires >= ~4 over the best plan's rollout. `GET /api/presets` serves them; the replay viewer has a preset dropdown that loads the match, seeks the fork and sets the control slot. A test asserts each preset is a live fork and that its clone sees+fires.
+- **Why:** the video must play the same engagement every take; nothing random.
+
+### D47. MODEL FROZEN
+- From here: no new features and no metric redefinitions. Only bug fixes and re-running `npm run eval` as new human matches arrive. The locked metric definitions live in `eval/METRICS.md`. If the frozen clone still loses to majority or cross-clone on the locked metrics once more humans have 3+ matches, that gets reported plainly rather than patched around.

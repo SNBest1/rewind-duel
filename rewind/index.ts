@@ -5,3 +5,4 @@ export { buildSnapshots, type Snapshot, type PlayerSnap } from './snapshot';
 export { PLANS, type Plan } from './plans';
 export { evaluatePlans, whatIf, type PlanResult } from './whatif';
 export { runWhatIf, type WhatIfOutcome } from './whatif-run';
+export { DEMO_PRESETS, presetByName, type DemoPreset } from './presets';

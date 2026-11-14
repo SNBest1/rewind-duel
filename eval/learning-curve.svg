@@ -25,10 +25,10 @@
 <circle cx="550" cy="231.13515949280057" r="3.5" fill="#7fd6e8"/>
 <rect x="566" y="67" width="12" height="12" fill="#7fd6e8"/>
 <text x="584" y="77" fill="#efe2c9" font-size="12">bot-one (bot)</text>
-<polyline points="60,255.27836996163586 305,220.6225365530716 550,197.58940809366408" fill="none" stroke="#e5483b" stroke-width="2.5"/>
-<circle cx="60" cy="255.27836996163586" r="3.5" fill="#e5483b"/>
-<circle cx="305" cy="220.6225365530716" r="3.5" fill="#e5483b"/>
-<circle cx="550" cy="197.58940809366408" r="3.5" fill="#e5483b"/>
+<polyline points="60,258.436264698478 305,247.67516813201894 550,224.64203967261147" fill="none" stroke="#e5483b" stroke-width="2.5"/>
+<circle cx="60" cy="258.436264698478" r="3.5" fill="#e5483b"/>
+<circle cx="305" cy="247.67516813201894" r="3.5" fill="#e5483b"/>
+<circle cx="550" cy="224.64203967261147" r="3.5" fill="#e5483b"/>
 <rect x="566" y="87" width="12" height="12" fill="#e5483b"/>
 <text x="584" y="97" fill="#efe2c9" font-size="12">bot-two (bot)</text>
 </svg>

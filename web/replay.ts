@@ -58,22 +58,44 @@ let forkTick = 0;
 
 // --- loading ------------------------------------------------------------------------------------
 
+type Preset = { name: string; matchId: string; forkTick: number; human: 0 | 1; opponent: string; note: string };
+let presets: Preset[] = [];
+
 async function loadMatchList(): Promise<void> {
   const list = (await (await fetch('/api/matches')).json()) as { id: string; players: string[]; ticks: number }[];
   const sel = $('matchSel') as HTMLSelectElement;
   sel.innerHTML = list.map((m) => `<option value="${m.id}">${m.players.join(' vs ')} — ${(m.ticks / TICK_RATE).toFixed(0)}s</option>`).join('');
+  // Demo presets: fixed forks so the video is repeatable.
+  try {
+    presets = (await (await fetch('/api/presets')).json()) as Preset[];
+    const ps = $('presetSel') as HTMLSelectElement;
+    ps.innerHTML = '<option value="">— demo preset —</option>' + presets.map((p) => `<option value="${p.name}">${p.name}: vs ${p.opponent}</option>`).join('');
+  } catch { /* presets are optional */ }
   if (list.length) await loadReplay(list[0].id);
 }
 
-async function loadReplay(id: string): Promise<void> {
+async function loadReplay(id: string, seekTick = 0): Promise<void> {
   stopRewind();
   replay = (await (await fetch(`/api/replay?id=${encodeURIComponent(id)}`)).json()) as Replay;
-  cursor = 0;
+  // Seek to the nearest snapshot at or before seekTick (snapshots are one per tick, so index == tick).
+  cursor = Math.max(0, Math.min(replay.snapshots.length - 1, seekTick));
   ($('scrub') as HTMLInputElement).max = String(replay.snapshots.length - 1);
+  ($('scrub') as HTMLInputElement).value = String(cursor);
   $('who').textContent = replay.players.map((p) => `${p.slot}:${p.name}`).join('  ');
   drawMarkers();
   resize();
   render();
+}
+
+/** Loads a named demo preset: its match, seeked to the fork tick, control slot set, ready for Take control. */
+async function loadPreset(name: string): Promise<void> {
+  const p = presets.find((x) => x.name === name);
+  if (!p) return;
+  controlSlot = p.human;
+  ($('slotSel') as HTMLSelectElement).value = String(p.human);
+  ($('matchSel') as HTMLSelectElement).value = p.matchId;
+  await loadReplay(p.matchId, p.forkTick);
+  $('rwstatus').textContent = `${p.name} — ${p.note} Press "Take control from here".`;
 }
 
 // --- timeline markers (DOM) ---------------------------------------------------------------------
@@ -331,6 +353,7 @@ setInterval(() => {
 // --- controls -----------------------------------------------------------------------------------
 
 ($('matchSel') as HTMLSelectElement).addEventListener('change', (e) => loadReplay((e.target as HTMLSelectElement).value));
+($('presetSel') as HTMLSelectElement).addEventListener('change', (e) => { const v = (e.target as HTMLSelectElement).value; if (v) loadPreset(v); });
 ($('scrub') as HTMLInputElement).addEventListener('input', (e) => {
   if (rewinding) return;
   cursor = Number((e.target as HTMLInputElement).value);

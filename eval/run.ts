@@ -18,7 +18,11 @@ import {
   BasicBot, MajorityBaseline, buildClone, isBotMatch, isBotName, isSelfMatch,
   loadMatches, matchesOf, playerNames, slotOf,
 } from '@rewind/clone';
-import { cloneAccuracy, handoffRate, positionError } from './metrics';
+import {
+  collectRecords, handoffRate,
+  moveMatchRate, fireMatchRate, balancedMove, firePrecisionVisible, fireRecallVisible, visibleTicks,
+  posErrorRaw, posErrorMoved, movedCount, bootstrapByRound, type CI,
+} from './metrics';
 import { transferCase } from './transfer';
 import { playerCurve, curveChartSvg, type PlayerCurve } from './learning-curve';
 import { auditWhatIf, forkSpread } from './whatif-audit';
@@ -33,40 +37,41 @@ const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
 const DROP_PLAYERS = new Set(['alpha', 'bravo', 'p1', 'p2']);
 const isDropped = (m: MatchFile) => m.players.some((p) => DROP_PLAYERS.has(p.name)) || isSelfMatch(m);
 
-/** Everything measured for one policy on the held-out match: raw + new metrics side by side. */
+/** Everything measured for one policy on the held-out match: raw + new metrics, each with a 95% CI. */
 type PolicyRow = {
   player: string;
   policy: string;
-  // raw
-  moveMatch: number;
-  fireMatch: number;
-  posErr: number;
-  // new (locked)
-  balancedMove: number;
-  firePrec: number;
-  fireRecall: number;
+  moveMatch: CI;
+  balancedMove: CI;
+  fireMatch: CI;
+  firePrec: CI;
+  fireRecall: CI;
   fireVisTicks: number;
-  posErrMoved: number;
-  movedStarts: number;
+  posErr: CI;
+  posErrMoved: CI;
   decisions: number;
+  rounds: number;
 };
 
+const BOOT = 1000; // bootstrap resamples
+
 function measure(player: string, policyName: string, held: MatchFile, slot: Slot, policy: Policy): PolicyRow {
-  const acc = cloneAccuracy(held, slot, policy);
-  const pos = positionError(held, slot, policy);
-  const d = Math.max(1, acc.decisions);
+  const rs = collectRecords(held, slot, policy);
+  const rounds = new Set(rs.map((r) => r.round)).size;
+  // Each CI resamples rounds (not ticks); a fixed seed makes the intervals reproducible.
+  const ci = (f: (x: typeof rs) => number, seed: number) => bootstrapByRound(rs, f, BOOT, seed);
   return {
     player, policy: policyName,
-    moveMatch: acc.moveMatch / d,
-    fireMatch: acc.fireMatch / d,
-    posErr: pos.avgError,
-    balancedMove: acc.balancedMoveAcc,
-    firePrec: acc.fireVisible.precision,
-    fireRecall: acc.fireVisible.recall,
-    fireVisTicks: acc.fireVisible.ticks,
-    posErrMoved: pos.avgErrorMoved,
-    movedStarts: pos.movedStarts,
-    decisions: acc.decisions,
+    moveMatch: ci(moveMatchRate, 1),
+    balancedMove: ci(balancedMove, 2),
+    fireMatch: ci(fireMatchRate, 3),
+    firePrec: ci(firePrecisionVisible, 4),
+    fireRecall: ci(fireRecallVisible, 5),
+    fireVisTicks: visibleTicks(rs),
+    posErr: ci(posErrorRaw, 6),
+    posErrMoved: ci(posErrorMoved, 7),
+    decisions: rs.length,
+    rounds,
   };
 }
 
@@ -96,12 +101,19 @@ function rowsForPlayer(player: string, usable: MatchFile[]): { rows: PolicyRow[]
   return { rows, breakerRate: h.rate, breakerLimit: own.breakerLimit };
 }
 
+/** A percentage CI like "44% [40–49]". */
+const pctCI = (c: CI) => `${pct(c.point)} [${pct(c.lo)}–${pct(c.hi)}]`;
+/** A distance CI like "3.42 [3.10–3.80]". */
+const uCI = (c: CI) => `${c.point.toFixed(2)} [${c.lo.toFixed(2)}–${c.hi.toFixed(2)}]`;
+
 function policyTable(rows: PolicyRow[]): string[] {
   const out: string[] = [];
-  out.push('| Player | Policy | Move match (raw) | Balanced move (new) | Fire match (raw) | Fire prec (vis) | Fire recall (vis) | Pos err (raw) | Pos err moved (new) | Decisions |');
-  out.push('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+  out.push('Each cell is the point estimate with its 95% bootstrap CI `[lo–hi]`, resampling by round.');
+  out.push('');
+  out.push('| Player | Policy | Move match (raw) | Balanced move (new) | Fire match (raw) | Fire recall (vis) | Pos err (raw) | Pos err moved (new) | Dec / rounds |');
+  out.push('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
   for (const r of rows) {
-    out.push(`| ${r.player} | ${r.policy} | ${pct(r.moveMatch)} | ${pct(r.balancedMove)} | ${pct(r.fireMatch)} | ${pct(r.firePrec)} | ${pct(r.fireRecall)} | ${r.posErr.toFixed(2)} | ${r.posErrMoved.toFixed(2)} | ${r.decisions} |`);
+    out.push(`| ${r.player} | ${r.policy} | ${pctCI(r.moveMatch)} | ${pctCI(r.balancedMove)} | ${pctCI(r.fireMatch)} | ${pctCI(r.fireRecall)} | ${uCI(r.posErr)} | ${uCI(r.posErrMoved)} | ${r.decisions} / ${r.rounds} |`);
   }
   out.push('');
   return out;
@@ -263,29 +275,30 @@ function honestRead(
   if (!built.length) {
     out.push('- Not enough human data yet. Only one human has two or more non-self matches. Show the method and the bot sanity check; say the human numbers are pending more games. Do not claim the human clone is validated.');
   }
+  // Two CIs "separate" only if they do not overlap — with this little data, most differences do not.
+  const separated = (a: CI, b: CI) => a.lo > b.hi || b.lo > a.hi;
   for (const b of built) {
     const on = b.rows.find((r) => r.policy.includes('breaker ON'))!;
     const majority = b.rows.find((r) => r.policy === 'majority action')!;
     const cross = b.rows.find((r) => r.policy.includes('(cross)'))!;
-    // Locked headline metrics: balanced move accuracy, and fire recall on visible ticks.
-    const beatsMajorityMove = on.balancedMove >= majority.balancedMove;
-    const beatsCrossMove = on.balancedMove >= cross.balancedMove;
-    const beatsPosMoved = on.posErrMoved <= majority.posErrMoved && on.posErrMoved <= cross.posErrMoved;
-    // Report wins and losses both, so the read is the full picture, not only the shortfall.
+    const beatsMajorityMove = on.balancedMove.point >= majority.balancedMove.point;
+    const beatsCrossMove = on.balancedMove.point >= cross.balancedMove.point;
+    const beatsPosMoved = on.posErrMoved.point <= majority.posErrMoved.point && on.posErrMoved.point <= cross.posErrMoved.point;
     const wins: string[] = [];
     const losses: string[] = [];
-    if (beatsMajorityMove && beatsCrossMove) wins.push(`balanced move ${pct(on.balancedMove)} (> majority ${pct(majority.balancedMove)}, cross ${pct(cross.balancedMove)})`);
-    if (on.fireRecall > majority.fireRecall && on.fireVisTicks > 0) wins.push(`fire recall on visible ticks ${pct(on.fireRecall)} (majority ${pct(majority.fireRecall)})`);
-    if (!beatsMajorityMove) losses.push(`majority's balanced move (${pct(majority.balancedMove)}) >= clone (${pct(on.balancedMove)})`);
-    if (!beatsCrossMove) losses.push(`cross-clone's balanced move (${pct(cross.balancedMove)}) >= clone (${pct(on.balancedMove)})`);
-    if (!beatsPosMoved) losses.push(`a baseline had smaller moved-position error (clone ${on.posErrMoved.toFixed(2)}, best baseline ${Math.min(majority.posErrMoved, cross.posErrMoved).toFixed(2)})`);
-    if (wins.length) out.push(`- **${b.p}** — clone WINS on: ${wins.join('; ')}.`);
-    if (losses.length) {
-      out.push(`- **${b.p}** — clone LOSES on: ${losses.join('; ')}.`);
-      out.push(`  - Why, plainly: the training set is 1–2 matches, so for many situations the nearest neighbor is far and the breaker (fired ${pct(b.breakerRate)} of the time) hands control to the basic bot — itself a baseline, so the two converge there. Position error is hard to beat because a mostly-still person is matched closely by "majority = stop". This is a data limit, not a metric trick; the factored votes and fire-visibility split are in place and should separate once a player has 3+ varied matches.`);
-    } else {
-      out.push(`- **${b.p}** — clone beats every baseline on the locked metrics. Holds up.`);
-    }
+    if (beatsMajorityMove && beatsCrossMove) wins.push(`balanced move ${pct(on.balancedMove.point)} (> majority ${pct(majority.balancedMove.point)}, cross ${pct(cross.balancedMove.point)})`);
+    if (on.fireRecall.point > majority.fireRecall.point && on.fireVisTicks > 0) wins.push(`fire recall on visible ticks ${pct(on.fireRecall.point)} (majority ${pct(majority.fireRecall.point)})`);
+    if (!beatsMajorityMove) losses.push(`majority's balanced move (${pct(majority.balancedMove.point)}) >= clone (${pct(on.balancedMove.point)})`);
+    if (!beatsCrossMove) losses.push(`cross-clone's balanced move (${pct(cross.balancedMove.point)}) >= clone (${pct(on.balancedMove.point)})`);
+    if (!beatsPosMoved) losses.push(`a baseline had smaller moved-position error (clone ${on.posErrMoved.point.toFixed(2)}, best baseline ${Math.min(majority.posErrMoved.point, cross.posErrMoved.point).toFixed(2)})`);
+    if (wins.length) out.push(`- **${b.p}** — clone WINS (point estimate) on: ${wins.join('; ')}.`);
+    if (losses.length) out.push(`- **${b.p}** — clone LOSES (point estimate) on: ${losses.join('; ')}.`);
+    // Significance: a difference only counts if the two 95% CIs do not overlap. State each comparison.
+    const moveVsMaj = separated(on.balancedMove, majority.balancedMove);
+    const moveVsCross = separated(on.balancedMove, cross.balancedMove);
+    const fireVsMaj = separated(on.fireRecall, majority.fireRecall);
+    out.push(`  - **Significance (non-overlapping 95% CIs, ${on.rounds} rounds):** balanced move vs majority ${moveVsMaj ? 'separates' : 'OVERLAPS'}, vs cross-clone ${moveVsCross ? 'separates' : 'OVERLAPS'}; fire recall vs majority ${fireVsMaj ? 'separates' : 'OVERLAPS'}. ${fireVsMaj && !moveVsMaj && !moveVsCross ? 'Only the fire-recall win is statistically real; the move differences are noise at this sample size.' : 'Treat overlapping differences as directional, not proven.'} The intervals will tighten once a player has 3+ matches.`);
+    out.push(`  - Why the clone and bot converge on move/position: 1–2 training matches means the nearest neighbor is often far, so the breaker (fired ${pct(b.breakerRate)} of ticks) hands to the basic bot — itself a baseline. Data limit, not a metric trick.`);
   }
   out.push(`- **What-if:** best-plan win vs the clone median ${pct(spread.summary.cloneWin.median)} vs the basic bot median ${pct(spread.summary.botWin.median)}. The clone now fires ${pct(spread.cloneFireWhenSeen)} of visible ticks vs the bot's ${pct(spread.botFireWhenSeen)}. ${spread.cloneFireWhenSeen >= spread.botFireWhenSeen * 0.6 ? 'The factored fire vote closed much of the old gap.' : 'The clone still fires less than the bot, so treat clone win rates as a ceiling until more firing data arrives.'}`);
   return out;

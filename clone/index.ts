@@ -5,5 +5,6 @@ export * from './knn';
 export * from './bot';
 export * from './guarded';
 export * from './factored';
+export * from './holding';
 export * from './majority';
 export * from './build';

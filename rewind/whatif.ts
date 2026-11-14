@@ -5,6 +5,7 @@ import {
   IDLE, observe, replayMatch, step,
   type GameEvent, type Input, type MatchFile, type Policy, type Slot, type State,
 } from '@rewind/engine';
+import { HoldingPolicy } from '@rewind/clone';
 import { PLANS, type Plan } from './plans';
 
 const SIM_TICKS = 96; // 3 seconds at 32 ticks/s
@@ -41,9 +42,14 @@ function simulateOnce(fork: State, human: Slot, plan: Plan, clone: Policy, seed:
   let shotsLanded = 0;
   const allEvents: GameEvent[] = [];
 
+  // The opponent decides every 4 ticks and HOLDS between decisions, exactly as the eval samples it, so a
+  // fire decision persists across its window instead of being re-rolled every tick (DECISIONS D44).
+  const opp = new HoldingPolicy(clone);
+  opp.reset();
+
   for (let t = 0; t < SIM_TICKS && s.phase === 'live'; t++) {
     const humanInput: Input = plan.act(observe(s, human), t);
-    const oppInput: Input = clone.act(observe(s, opponent)).input;
+    const oppInput: Input = opp.act(observe(s, opponent)).input;
     const inputs: [Input, Input] = [IDLE, IDLE];
     inputs[human] = humanInput;
     inputs[opponent] = oppInput;

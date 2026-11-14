@@ -12,7 +12,7 @@ import {
   canSee, observe, replayMatch, step,
   type Input, type MatchFile, type Observation, type Policy, type Slot, type State,
 } from '@rewind/engine';
-import { BasicBot, buildClone, matchesOf, type BuiltClone } from '@rewind/clone';
+import { BasicBot, HoldingPolicy, buildClone, matchesOf, type BuiltClone } from '@rewind/clone';
 import { PLANS, evaluatePlans, timelineMarkers, type Plan } from '@rewind/rewind';
 
 /** A policy that may expose reset() (the clones and the bot do). */
@@ -149,13 +149,15 @@ export type ForkSpread = {
  */
 function opponentFireAudit(fork: State, human: Slot, opponentPolicy: ResettablePolicy, plan: Plan): { saw: number; fired: number } {
   const opponent = (1 - human) as Slot;
-  opponentPolicy.reset?.();
+  // Hold the opponent's decision across 4 ticks, matching the fixed live paths (what-if, rewind).
+  const held = new HoldingPolicy(opponentPolicy);
+  held.reset();
   let s: State = JSON.parse(JSON.stringify(fork));
   let saw = 0, fired = 0;
   for (let t = 0; t < 96 && s.phase === 'live'; t++) {
     const oObs = observe(s, opponent);
     if (oObs.enemy) saw++;
-    const oInput = opponentPolicy.act(oObs).input;
+    const oInput = held.act(oObs).input;
     if (oInput.fire) fired++;
     const inputs: [Input, Input] = [
       { move: { x: 0, y: 0 }, walk: false, aim: 0, fire: false, reload: false, smoke: false, dash: false, use: false },
