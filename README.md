@@ -136,6 +136,8 @@ Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timel
 - **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, …) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
 - **first-person →** opens `/fpv.html`, a three.js first-person view of the same recorded match — walls extruded, the camera at one player's eye along their aim, a ripple on the floor whenever a player runs. It renders the 2D snapshots; the simulation stays 2D.
 
+There is also a **Unity 3D viewer** of recorded matches under `unity/RewindDuel3D` (scaffolded from the `unity` CLI). Like the three.js view it is a renderer of exported snapshots, not a second engine. Build its data with `npm run export:unity`, then see `unity/README.md` to generate the scene and run it.
+
 ## Run the evals
 
 ```bash

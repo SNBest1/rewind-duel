@@ -23,6 +23,7 @@
     "botmatch": "tsx scripts/botmatch.ts",
     "whatif": "tsx rewind/whatif-cli.ts",
     "eval": "tsx eval/run.ts",
+    "export:unity": "tsx scripts/export-unity.ts",
     "check:determinism": "node scripts/check-determinism.mjs"
   },
   "devDependencies": {

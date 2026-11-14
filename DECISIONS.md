@@ -274,3 +274,11 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 
 ### D47. MODEL FROZEN
 - From here: no new features and no metric redefinitions. Only bug fixes and re-running `npm run eval` as new human matches arrive. The locked metric definitions live in `eval/METRICS.md`. If the frozen clone still loses to majority or cross-clone on the locked metrics once more humans have 3+ matches, that gets reported plainly rather than patched around.
+
+## Unity 3D viewer
+
+### D48. Unity is a renderer of exported snapshots, built from the CLI — not a second engine
+- **Chose:** a Unity project (`unity/RewindDuel3D`, URP, editor `6000.6.9f1`) scaffolded and driven entirely from the `unity` CLI. `npm run export:unity` writes `map.json` (walls/sites from `engine/map.ts`) and `match.json` (`buildSnapshots` of a recorded match) into `Assets/StreamingAssets/`. C# (`MapBuilder`, `MatchReplay`) builds the 3D world and animates both players + a first-person camera from those snapshots. An editor script (`SceneBuilder`) generates the scene headless via `unity run -- -executeMethod`.
+- **Why:** same reasoning as the three.js FPV (D31) and hard rule 3 — the Node engine is the one deterministic source of truth. Re-implementing movement/vision/clone in C# would be a second engine that could drift from the recordings and the evals. Unity consumes the exact same snapshot payload the replay viewer uses, so it can never disagree.
+- **Verified in-session, headless:** the scene built with zero `error CS`, and a `StandaloneOSX` player built successfully (77 MB app, `map.json`+`match.json` shipped in `Contents/Resources/Data/StreamingAssets`). Could NOT screenshot the live render — the sandbox has no display — so the visual frame is unverified; the user presses Play to see it.
+- **Tradeoff / ruled out:** no live WebSocket link and no clone in Unity. Driving a live rewind stays in Node (`server/` + `web/replay.html`); Unity is for 3D replay/presentation. The CLI lists five editor versions but only `6000.6.9f1` is installed on disk, so the project is pinned to it.
