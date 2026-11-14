@@ -68,6 +68,7 @@
   <div id="stage">
     <canvas id="arena"></canvas>
     <div id="pop" class="pop"></div>
+    <div id="whatifPanel" class="pop" style="left:8px;right:auto;bottom:8px;width:320px;border-color:var(--vu)"></div>
   </div>
 
   <aside>
@@ -83,6 +84,7 @@
       <span id="clock" class="hint">0.0s</span>
       <span class="grow"></span>
       <label class="hint">control <select id="slotSel"><option value="0">slot 0</option><option value="1">slot 1</option></select></label>
+      <button id="whatif">What could I have done?</button>
       <button id="take">Take control from here</button>
       <button id="retry" style="display:none">retry from fork</button>
       <span id="rwstatus" class="hint"></span>

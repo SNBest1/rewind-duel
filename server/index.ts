@@ -7,7 +7,8 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_RATE, observe, visibleEvents, type Input, type Slot } from '@rewind/engine';
 import { MatchRunner, sanitizeInput } from './match';
 import { matchList, openSession, replayPayload } from './rewind';
-import type { RewindSession } from '@rewind/rewind';
+import { runWhatIf, type RewindSession } from '@rewind/rewind';
+import type { MatchFile } from '@rewind/engine';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_MS = Number(process.env.TICK_MS ?? 1000 / TICK_RATE);
@@ -184,6 +185,20 @@ wss.on('connection', (ws) => {
       const outcome = rewind.endBranch();
       send(ws, { t: 'branch', outcome });
       sendRewind();
+    } else if (msg.t === 'whatif') {
+      // "What you could have done": rank the micro-plans from this fork, in a worker thread.
+      const id = String(msg.id ?? '');
+      const human = (msg.human === 1 ? 1 : 0) as Slot;
+      const forkTick = Number.isSafeInteger(msg.forkTick) ? Math.max(0, msg.forkTick as number) : 0;
+      if (!/^[a-z0-9-]{1,40}$/.test(id)) return send(ws, { t: 'error', msg: 'bad match id' });
+      try {
+        const file = JSON.parse(readFileSync(`${DATA_DIR}${id}.json`, 'utf8')) as MatchFile;
+        runWhatIf(file, human, forkTick, 3)
+          .then((out) => send(ws, { t: 'whatif', forkTick, ranInWorker: out.ranInWorker, results: out.results }))
+          .catch((e) => send(ws, { t: 'error', msg: `what-if failed: ${(e as Error).message}` }));
+      } catch (e) {
+        send(ws, { t: 'error', msg: `what-if failed: ${(e as Error).message}` });
+      }
     }
   });
 

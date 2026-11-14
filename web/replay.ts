@@ -342,6 +342,35 @@ $('visThem').addEventListener('click', () => { showThem = !showThem; $('visThem'
 ($('slotSel') as HTMLSelectElement).addEventListener('change', (e) => (controlSlot = Number((e.target as HTMLSelectElement).value) as 0 | 1));
 $('take').addEventListener('click', startRewind);
 $('retry').addEventListener('click', () => ws?.send(JSON.stringify({ t: 'retry' })));
+$('whatif').addEventListener('click', runWhatIf);
+$('whatifPanel').addEventListener('dblclick', () => $('whatifPanel').classList.remove('show'));
+
+/** Ask the server to rank the micro-plans from the current fork, and show the top 3. */
+function runWhatIf(): void {
+  if (!replay) return;
+  const fork = replay.snapshots[cursor].tick;
+  const panel = $('whatifPanel');
+  panel.classList.add('show');
+  panel.innerHTML = `<b style="color:${VU}">What you could have done</b><br><span class="hint">simulating 20 plans × 5 runs from tick ${fork}…</span>`;
+  const w = new WebSocket(wsUrl());
+  w.onopen = () => w.send(JSON.stringify({ t: 'whatif', id: replay!.id, human: controlSlot, forkTick: fork }));
+  w.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.t === 'whatif') {
+      panel.innerHTML =
+        `<b style="color:${VU}">What you could have done</b> <span class="hint">(from tick ${msg.forkTick}${msg.ranInWorker ? ', worker' : ''})</span><br>` +
+        (msg.results as any[]).map((r, i) =>
+          `<div style="margin-top:6px"><b>${i + 1}. ${r.label}</b><br>` +
+          `<span class="hint">win ${(r.winRate * 100).toFixed(0)}% · survive ${(r.survivalRate * 100).toFixed(0)}% · ${r.avgShotsLanded.toFixed(1)} shots</span><br>` +
+          `${r.reason}</div>`,
+        ).join('');
+      w.close();
+    } else if (msg.t === 'error') {
+      panel.innerHTML = `<b style="color:${REC}">what-if failed</b><br>${msg.msg}`;
+      w.close();
+    }
+  };
+}
 
 // Playback loop for replay mode.
 let lastStep = performance.now();

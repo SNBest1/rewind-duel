@@ -154,3 +154,21 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** `RewindSession.endBranch()` records the outcome (winner, whether the human won, the handoff tick, the full trace) and resets to the fork for another attempt. `openSession` builds the opponent's clone from all of their matches except the one being relived, when they have more than one.
 - **Why:** the branches are the raw material for the Phase 4 "what you could have done" and the Phase 5 transfer test. Holding out the relived match stops the clone from simply replaying the exact game back at the player.
 - **Tradeoff:** a player with only one recorded match gets a clone trained on that match (no hold-out available), so its first branch can look suspiciously like the recording until the human diverges.
+
+## Phase 4 (what you could have done)
+
+### D26. Micro-plans are scripted named policies, not a search
+- **Chose:** about twenty hand-written plans (`rewind/plans.ts`), each a tiny function from the human's `Observation` to an `Input`: stop-and-shoot, back off to the nearest cover corner and hold or trade, smoke the angle then cross, dash out of the line four ways, walk quiet and hold an angle, rush the last-seen, fall back and reload. Each has a readable label.
+- **Why:** the spec names these exact ideas, and the point is advice a human can act on ("back off to cover and wait"), not an opaque optimum. Scripted plans also run in milliseconds, so 20 plans × 5 seeds is cheap.
+- **Tradeoff:** the plans are a fixed menu, so the tool can only suggest what is on it. A plan that would have worked but is not scripted is never found.
+- **Ruled out:** a tree search or RL rollout over the raw action space (slow, and the result is not nameable advice); using the clone of the human as the plan (that is "what you did", not "what you could have done").
+
+### D27. Rank by fight wins first, survival second, with shots landed as a tiebreak
+- **Chose:** each plan runs 5 times from the fork under different seeds (overwriting `State.rng`, D2) for 3 seconds against the opponent's guarded clone. `score = winRate + 0.3·survivalRate + 0.02·avgShotsLanded` (`rewind/whatif.ts`). The top 3 come back with a one-line reason read off the events ("won the fight every time, landing 3.0 shots").
+- **Why:** winning the duel is the goal; surviving without the kill is second best; shots landed separates two plans that both merely survive. Five seeds smooth out a single lucky spread roll without being slow.
+- **Tradeoff:** 3 seconds and 5 runs are short and few, so a plan whose payoff comes later (a slow rotate) is undervalued. The weights are hand-picked for readability over optimality.
+
+### D28. The what-if runs in a Node worker thread, with an inline fallback
+- **Chose:** `runWhatIf` builds the clone, then evaluates the plans in a `worker_thread` (`rewind/whatif-worker.ts`, `rewind/whatif-run.ts`). A `GuardedClone` cannot cross the thread boundary, so the worker is handed the raw samples plus the breaker limit and rebuilds it. If the worker cannot start, it runs inline and reports `ranInWorker: false`.
+- **Why:** the spec requires it off the live loop so a what-if (tens of thousands of ticks) never stalls a rewind session on the same server. The inline fallback means a demo never silently fails if the worker loader is unavailable.
+- **Tradeoff:** passing the full sample set into the worker is a copy of a few thousand vectors per request. Acceptable for an on-demand action; a long-lived pool would avoid it if this were hot.
