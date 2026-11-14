@@ -5,7 +5,11 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { BUY_TICKS, MAP_IDS, TICK_RATE, WEAPONS, getMap, hashState, isMapId, observe, visibleEvents, type MatchFile, type Slot } from '@rewind/engine';
+import {
+  BUY_TICKS, MAP_IDS, TICK_RATE, WEAPONS, getMap, hashState, isMapId, observe, visibleEvents,
+  type Input, type MatchFile, type Slot,
+} from '@rewind/engine';
+// This branch's live AI, clones, rewind and coach (ai/).
 import { GuardedClone, buildClone, loadMatches } from '../ai/clone/knn';
 import type { Policy, TraceLine } from '../ai/clone/policy';
 import { forkState, RewindDriver, type BranchFile } from '../ai/rewind/session';
@@ -14,7 +18,10 @@ import { analyzeMatch, type MatchSummary } from '../ai/rewind/summary';
 import { AiPlayer, BasicBot, parseDifficulty, type Difficulty } from './ai';
 import { ALL_RANKS, rankOf } from './ranks';
 import { BrainStore, Trainer, summarize } from './brain';
-import { MatchRunner } from './match';
+import { MatchRunner, sanitizeInput } from './match';
+// main's replay viewer, roster, demo presets and rewind protocol (clone/, rewind/ packages).
+import { matchList, openSession, replayPayload, rosterData } from './rewind';
+import { runWhatIf, DEMO_PRESETS, type RewindSession } from '@rewind/rewind';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_MS = Number(process.env.TICK_MS ?? 1000 / TICK_RATE);
@@ -442,10 +449,45 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const http = createServer((req, res) => {
-  const path = (req.url ?? '/').split('?')[0];
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const path = url.pathname;
+
+  // main's replay / rewind viewer API (web/replay.html, roster.html, fpv.html).
+  if (path === '/api/matches') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(matchList(DATA_DIR)));
+  }
+  if (path === '/api/roster') {
+    // Computed fresh from data/ each request so the roster page can poll it as matches land.
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify(rosterData(DATA_DIR)));
+  }
+  if (path === '/api/presets') {
+    // The fixed demo forks, so the video loads the same engagement every take.
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(DEMO_PRESETS));
+  }
+  if (path === '/api/replay') {
+    const id = url.searchParams.get('id') ?? '';
+    // The id becomes a file path, so restrict it to the same safe charset match ids use.
+    if (!/^[a-z0-9-]{1,40}$/.test(id)) {
+      res.writeHead(400, { 'content-type': 'text/plain' });
+      return res.end('bad id');
+    }
+    try {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(replayPayload(DATA_DIR, id)));
+    } catch {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      return res.end('match not found');
+    }
+  }
+
+  // The live game's in-page viewer, what-if and coach API (web/main.ts). Under /api/viewer so it does not
+  // collide with main's /api/matches, which has a different shape.
   // Bumped whenever the client and server must change together. The page refuses to guess with an old server.
   if (req.method === 'GET' && path === '/api/version') return json(res, 200, { version: 3 });
-  if (req.method === 'GET' && path === '/api/matches') {
+  if (req.method === 'GET' && path === '/api/viewer/matches') {
     const list = loadMatches(DATA_DIR)
       .map((f) => ({ ...summaryOf(f), branches: loadBranches(f.id).length }))
       .sort((a, b) => b.id.localeCompare(a.id));
@@ -477,7 +519,7 @@ const http = createServer((req, res) => {
     if (!job) return json(res, 404, { error: 'no such job' });
     return json(res, 200, job);
   }
-  const m = /^\/api\/matches\/([a-z0-9-]+)$/.exec(path);
+  const m = /^\/api\/viewer\/matches\/([a-z0-9-]+)$/.exec(path);
   if (req.method === 'GET' && m) {
     const file = loadMatch(m[1]);
     if (!file) return json(res, 404, { error: 'no such match' });
@@ -492,12 +534,31 @@ const http = createServer((req, res) => {
   res.end(asset.body);
 });
 
-// --- websocket: join a match, an AI match or a rewind ----------------------------------------------
+// --- websocket: join a match, an AI match or a rewind (this branch), or main's rewind protocol ---------
 
-const wss = new WebSocketServer({ server: http, maxPayload: 1024 });
+// 1 KB is plenty for a live input, but main's rewind message carries the trace and a snapshot, so allow 256 KB.
+const wss = new WebSocketServer({ server: http, maxPayload: 256 * 1024 });
 wss.on('connection', (ws) => {
   let room: Room | undefined;
   let slot: Slot = 0;
+  let rewind: RewindSession | undefined; // a rewind session on this socket, if any
+
+  /** Sends the human's fogged observation plus a full both-sides snapshot and the branch trace so far. */
+  const sendRewind = (events: unknown[] = []) => {
+    if (!rewind) return;
+    const s = rewind.state;
+    send(ws, {
+      t: 'rw',
+      obs: observe(s, rewind.human),
+      // The both-sides snapshot is allowed here: a rewind is the player reliving their own recorded match.
+      enemy: { x: s.players[rewind.opponent].x, y: s.players[rewind.opponent].y, aim: s.players[rewind.opponent].aim, hp: s.players[rewind.opponent].hp },
+      mode: rewind.mode,
+      handoffTick: rewind.handoffTick,
+      events,
+      trace: rewind.trace.slice(-200),
+      done: rewind.done,
+    });
+  };
 
   ws.on('message', (data) => {
     let msg: any;
@@ -581,6 +642,43 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'input' && room?.runner) {
       const r = room;
       lagged(() => r.runner?.setInput(slot, msg.input, msg.seq));
+    } else if (msg.t === 'rewind') {
+      // Open a rewind session: take control of `human` from `forkTick` of match `id`.
+      const id = String(msg.id ?? '');
+      const human = (msg.human === 1 ? 1 : 0) as Slot;
+      const forkTick = Number.isSafeInteger(msg.forkTick) ? Math.max(0, msg.forkTick as number) : 0;
+      if (!/^[a-z0-9-]{1,40}$/.test(id)) return send(ws, { t: 'error', msg: 'bad match id' });
+      try {
+        rewind = openSession(DATA_DIR, id, human, forkTick);
+        send(ws, { t: 'rwopen', human, opponent: rewind.opponent, forkTick, divergenceLimit: rewind.limit });
+        sendRewind();
+      } catch (e) {
+        send(ws, { t: 'error', msg: `could not open rewind: ${(e as Error).message}` });
+      }
+    } else if (msg.t === 'rwinput' && rewind) {
+      // One tick of the rewind session with the human's input.
+      const input: Input = sanitizeInput(msg.input);
+      const events = rewind.tick(input);
+      sendRewind(events);
+    } else if (msg.t === 'retry' && rewind) {
+      // End this branch, store its outcome, and reset to the fork tick.
+      const outcome = rewind.endBranch();
+      send(ws, { t: 'branch', outcome });
+      sendRewind();
+    } else if (msg.t === 'whatif') {
+      // "What you could have done": rank the micro-plans from this fork, in a worker thread.
+      const id = String(msg.id ?? '');
+      const human = (msg.human === 1 ? 1 : 0) as Slot;
+      const forkTick = Number.isSafeInteger(msg.forkTick) ? Math.max(0, msg.forkTick as number) : 0;
+      if (!/^[a-z0-9-]{1,40}$/.test(id)) return send(ws, { t: 'error', msg: 'bad match id' });
+      try {
+        const file = JSON.parse(readFileSync(`${DATA_DIR}${id}.json`, 'utf8')) as MatchFile;
+        runWhatIf(file, human, forkTick, 3)
+          .then((out) => send(ws, { t: 'whatif', forkTick, ranInWorker: out.ranInWorker, results: out.results }))
+          .catch((e) => send(ws, { t: 'error', msg: `what-if failed: ${(e as Error).message}` }));
+      } catch (e) {
+        send(ws, { t: 'error', msg: `what-if failed: ${(e as Error).message}` });
+      }
     }
   });
 

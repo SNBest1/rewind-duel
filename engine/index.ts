@@ -11,3 +11,5 @@ export {
   WEAPONS, SHIELDS, ECON, NO_WEAPON, weapon, damageAt, isBuyable, HEAD_RADIUS, BUY_TICKS, SWITCH_TICKS, SHOT_HEAR_RANGE,
   type Weapon, type WeaponClass,
 } from './weapons';
+export { describeAction, type TraceRef, type TraceEvent } from './trace';
+export type { Policy } from './types';

@@ -528,7 +528,7 @@ const detailCache = new Map<string, MatchDetail>();
 async function fetchDetail(id: string): Promise<MatchDetail> {
   let d = detailCache.get(id);
   if (!d) {
-    const res = await fetch(`${SERVER}/api/matches/${id}`);
+    const res = await fetch(`${SERVER}/api/viewer/matches/${id}`);
     if (!res.ok) throw new Error(`match ${id}: ${res.status}`);
     d = (await res.json()) as MatchDetail;
     detailCache.set(id, d);
@@ -838,7 +838,7 @@ async function openReplays(): Promise<void> {
   box.textContent = 'Loading…';
   $('replays').style.display = 'grid';
   try {
-    const res = await fetch(`${SERVER}/api/matches`);
+    const res = await fetch(`${SERVER}/api/viewer/matches`);
     if (!res.ok) throw new Error(String(res.status));
     const list = (await res.json()) as MatchSummaryT[];
     box.innerHTML = '';

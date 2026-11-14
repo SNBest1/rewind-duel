@@ -19,18 +19,24 @@ export function divergenceScore(recorded: State, branch: State, opponent: Slot):
   const sawThen = canSee(recorded, opponent, human);
   const seesNow = canSee(branch, opponent, human);
 
-  // Was TODO(human). Placeholder so the demo runs; replace with your own weighting.
-  // Position drift of both players in map units, averaged so one player walking a unit away scores 0.5.
+  // Everything is in map units so the pieces add up to one comparable number.
+  // Position drift: how far each player has moved from where the recording had them at this tick.
   let pos = 0;
+  for (const slot of [0, 1] as const) {
+    const r = recorded.players[slot];
+    const b = branch.players[slot];
+    pos += Math.hypot(b.x - r.x, b.y - r.y);
+  }
+
+  // HP drift: a different fight is unfolding. 25 HP (one bullet) is worth ~1 unit, so /25.
   let hp = 0;
   for (const slot of [0, 1] as const) {
-    const a = recorded.players[slot];
-    const b = branch.players[slot];
-    pos += Math.hypot(a.x - b.x, a.y - b.y) / 2;
-    // One rifle hit (25 HP) of difference counts as one unit.
-    hp += Math.abs(a.hp - b.hp) / 25;
+    hp += Math.abs(branch.players[slot].hp - recorded.players[slot].hp) / 25;
   }
-  // The ghost's recorded inputs assume it could (or could not) see you. If that flipped, they are answering a different fight.
-  const flip = sawThen !== seesNow ? 1.5 : 0;
+
+  // Visibility flip: the opponent now sees (or no longer sees) the human when the recording had it the other way.
+  // The recorded inputs were an answer to the old sightline, so a flip makes them stale. Worth 2 units (near the limit).
+  const flip = sawThen !== seesNow ? 2 : 0;
+
   return pos + hp + flip;
 }

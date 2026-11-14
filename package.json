@@ -5,7 +5,10 @@
   "workspaces": [
     "engine",
     "server",
-    "web"
+    "web",
+    "clone",
+    "rewind",
+    "eval"
   ],
   "engines": {
     "node": ">=20"
@@ -18,8 +21,11 @@
     "typecheck": "tsc --noEmit",
     "replay": "tsx server/replay.ts",
     "botmatch": "tsx scripts/botmatch.ts",
+    "whatif": "tsx rewind/whatif-cli.ts",
+    "eval": "tsx eval/run.ts",
+    "export:unity": "tsx scripts/export-unity.ts",
     "check:determinism": "node scripts/check-determinism.mjs",
-    "eval": "tsx eval/clone-eval.ts",
+    "eval:live-clones": "tsx eval/clone-eval.ts",
     "demo:data": "tsx scripts/demo-data.ts",
     "eval:belief": "tsx eval/belief-ablation.ts 4",
     "eval:ranks": "tsx eval/rank-ladder.ts 1",

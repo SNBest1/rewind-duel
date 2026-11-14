@@ -507,6 +507,19 @@ export function step(prev: State, inputs: [Input, Input]): { next: State; events
   return { next: s, events };
 }
 
+/**
+ * True once a state has left the original game: VALORANT rules, a flashbang, a gun other than the original
+ * rifle in hand, shields, or a sub-tick fire cooldown. Spray and last-shot tick are left out of the test on
+ * purpose: with the original rifle (no bloom) they cannot change how the match unfolds.
+ */
+function usesNewFields(s: State): boolean {
+  if (s.rules === 'valorant' || s.flashes.length > 0) return true;
+  return s.players.some((p) =>
+    p.flashes !== C.FLASHES || p.flashCooldown !== 0 || p.blindTicks !== 0 || p.primary !== 0 || p.secondary !== 1 ||
+    p.equipped !== 0 || p.switchTicks !== 0 || p.armor !== 0 || p.credits !== 0 || p.ammo2 !== weapon(1).mag ||
+    p.fireCooldown % 100 !== 0);
+}
+
 /** FNV-1a (32-bit) over the whole state, with floats quantized to 1/1000. */
 export function hashState(s: State): string {
   const q = (v: number) => Math.round(v * 1000);
@@ -517,19 +530,30 @@ export function hashState(s: State): string {
     phases[s.phase], s.phaseTicks, s.roundTicks, s.winner ?? -1,
     spikes[s.spike.state], q(s.spike.x), q(s.spike.y), s.spike.ticksLeft,
   ];
+  // The original fields, in the original order. fireCooldown is now kept in 1/100 ticks; the original rifle
+  // only ever holds whole ticks, so /100 gives back exactly the number the original engine hashed.
   for (const p of s.players) {
     ints.push(
-      q(p.x), q(p.y), q(p.aim), p.hp, p.ammo, p.reloadTicks, p.fireCooldown,
+      q(p.x), q(p.y), q(p.aim), p.hp, p.ammo, p.reloadTicks, Math.trunc(p.fireCooldown / 100),
       p.smokes, p.dashes, p.dashTicks, q(p.dashX), q(p.dashY), p.useTicks, p.moveState,
       p.lastSeen ? q(p.lastSeen.x) : -1, p.lastSeen ? q(p.lastSeen.y) : -1, p.lastSeen ? p.lastSeen.tick : -1,
-      p.flashes, p.flashCooldown, p.blindTicks,
-      p.primary, p.secondary, p.equipped, p.ammo2, p.switchTicks, Math.round(p.spray * 2), p.shotTick,
-      p.credits, p.armor,
     );
   }
-  ints.push(s.rules === 'valorant' ? 1 : 0, s.lossStreak[0], s.lossStreak[1]);
   for (const k of s.smokes) ints.push(q(k.x), q(k.y), k.ticksLeft);
-  for (const f of s.flashes) ints.push(q(f.x), q(f.y), q(f.vx), q(f.vy), f.ticksLeft, f.slot);
+  // Fields added later (flashes, guns, economy) are hashed only once a state actually uses them. A classic
+  // match that never touches them evolves exactly as it did before they existed, so every recording made
+  // before then keeps its original hash and `npm run replay` still matches it.
+  if (usesNewFields(s)) {
+    for (const p of s.players) {
+      ints.push(
+        p.fireCooldown, p.flashes, p.flashCooldown, p.blindTicks,
+        p.primary, p.secondary, p.equipped, p.ammo2, p.switchTicks, Math.round(p.spray * 2), p.shotTick,
+        p.credits, p.armor,
+      );
+    }
+    ints.push(s.rules === 'valorant' ? 1 : 0, s.lossStreak[0], s.lossStreak[1]);
+    for (const f of s.flashes) ints.push(q(f.x), q(f.y), q(f.vx), q(f.vy), f.ticksLeft, f.slot);
+  }
 
   let h = 0x811c9dc5;
   for (const n of ints) {

@@ -26,7 +26,7 @@ export type Scene3DInput = {
 };
 
 /** A canvas texture of the floor: grid, sites with big letters, teleporter pads. */
-function floorTexture(map: GameMap): unknown {
+function floorTexture(map: GameMap): THREE.CanvasTexture {
   const px = 32;
   const c = document.createElement('canvas');
   c.width = map.width * px;

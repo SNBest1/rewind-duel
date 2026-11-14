@@ -1,4 +1,4 @@
-// Evidence for the judges, from real recorded data. Run with: npm run eval
+// Evidence for the judges, from real recorded data. Run with: npm run eval:live-clones
 // Writes eval/results.md. Reports the real numbers, weak or not.
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { BasicBot, seededRng } from '../server/ai';
 import type { Brain } from '../server/brain';
 
 const DATA = fileURLToPath(new URL('../data/', import.meta.url));
-const OUT = fileURLToPath(new URL('./results.md', import.meta.url));
+const OUT = fileURLToPath(new URL('./results-live.md', import.meta.url));
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 const files = loadMatches(DATA);

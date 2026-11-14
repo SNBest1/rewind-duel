@@ -1,0 +1,1 @@
+{ "name": "@rewind/clone", "version": "0.0.0", "private": true, "type": "module", "main": "index.ts", "types": "index.ts", "dependencies": { "@rewind/engine": "^0.0.0" } }
