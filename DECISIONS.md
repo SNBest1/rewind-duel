@@ -389,3 +389,11 @@ Built in parallel with main's Phases 2 to 6 from the Phase 2 scaffold, then merg
 ### D69. The AI plays the economy
 - **Chose:** pistol rounds (Sheriff / Ghost + shields by rank), keep-and-top-up when it survived, full buy at 3900 (rifle + heavy shields, Operator sometimes on defence), force buy with 2000+, eco otherwise.
 - **Measured:** the first version saved at 2000-3900 like a real team would. In a first-to-5 match that threw rounds, and the rank ladder went flat (Bronze vs Iron 50%). Forcing, plus a steeper aim curve at the low end (`sqrt(skill)`), restored a clear ladder (53-71% for every step).
+
+## Unity client for the live game
+
+### D70. The Unity first-person client reads the game from the server, never from a C# copy
+- **Chose:** two additive server changes. The `start` message now carries `mapData` (the full map) next to the existing `map` id. A new read-only `GET /api/catalog` returns every map with its geometry, the difficulties, the ranks, the armory, the shields, the buy window and the round length. The Unity client (`~/My project (1)`, `Assets/RewindDuel/`) builds its lobby, buy menu, minimap and arena from these. The browser client ignores both.
+- **Why:** the Unity client cannot import the TypeScript engine. Copying maps or the armory into C# would drift the first time either changes, and would put weapon and map names in a second codebase. Now they live only in `engine/`.
+- **What Unity covers:** all four lobby modes (AI by difficulty or fixed rank, mirror, friend room with map vote, rewind of a recorded round), the buy phase and economy, both weapon slots, shields, flashes (thrown orbs, pops and a white-out driven by the server's own blind countdown), smokes, teleporters (with movement prediction that teleports exactly like the server), three-site maps, heard footsteps and shots, the AI's level, rank and reads, its belief map (on the minimap and, with I, painted onto the floor), its trace, and the end screen's insights and coach.
+- **Verified in play against this server:** full AI matches on Bind (buys, teleports every round, kills, a side swap) and Haven (a headshot, a flash that blinded the thrower), plus friend, mirror and rewind sessions. The movement port matches the engine bit for bit (D49).

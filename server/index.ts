@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
-  BUY_TICKS, MAP_IDS, TICK_RATE, WEAPONS, getMap, hashState, isMapId, observe, visibleEvents,
+  BUY_TICKS, C, MAP_IDS, SHIELDS, TICK_RATE, WEAPONS, getMap, hashState, isMapId, observe, visibleEvents,
   type Input, type MatchFile, type Slot,
 } from '@rewind/engine';
 // This branch's live AI, clones, rewind and coach (ai/).
@@ -15,7 +15,7 @@ import type { Policy, TraceLine } from '../ai/clone/policy';
 import { forkState, RewindDriver, type BranchFile } from '../ai/rewind/session';
 import { coachMoments } from '../ai/rewind/coach';
 import { analyzeMatch, type MatchSummary } from '../ai/rewind/summary';
-import { AiPlayer, BasicBot, parseDifficulty, type Difficulty } from './ai';
+import { AiPlayer, BasicBot, DIFFICULTIES, parseDifficulty, type Difficulty } from './ai';
 import { ALL_RANKS, rankOf } from './ranks';
 import { BrainStore, Trainer, summarize } from './brain';
 import { MatchRunner, sanitizeInput } from './match';
@@ -168,7 +168,8 @@ function startMatch(room: Room): void {
   }
 
   room.sockets.forEach((ws, slot) => send(ws, {
-    t: 'start', names: room.names, map: mapId, votes: room.votes,
+    // mapData: the geometry, for clients that do not import the engine (the Unity client).
+    t: 'start', names: room.names, map: mapId, mapData: getMap(mapId), votes: room.votes,
     ai: room.ai ? { difficulty: room.ai.difficulty, skill: room.ai.bot!.skill, rank: rankOf(room.ai.bot!.skill) } : null,
     mirror: room.mirror ? { samples: room.mirror.samples, matches: room.mirror.matches } : null,
     brain: summarize(room.trainers[slot].brain),
@@ -286,7 +287,7 @@ function startRewind(ws: WebSocket, file: MatchFile, forkTick: number, human: Sl
 
   const original = summaryOf(file).rounds.find((r) => r.round === start.round);
   send(ws, {
-    t: 'start', names: room.names, map: file.map, votes: [], ai: null, brain: summarize(trainer.brain),
+    t: 'start', names: room.names, map: file.map, mapData: getMap(file.map), votes: [], ai: null, brain: summarize(trainer.brain),
     rewind: {
       match: file.id, tick: forkTick, round: start.round, roundStartTick: forkTick - start.roundTicks, opponent, branch: branchNo,
       originalOutcome: original?.winner === null || original?.winner === undefined ? null : original.winner === human ? 'won' : 'lost',
@@ -487,6 +488,20 @@ const http = createServer((req, res) => {
   // collide with main's /api/matches, which has a different shape.
   // Bumped whenever the client and server must change together. The page refuses to guess with an old server.
   if (req.method === 'GET' && path === '/api/version') return json(res, 200, { version: 3 });
+  // Everything a client that does not import the engine needs for its lobby and buy menu (the Unity client).
+  // Infinity in a damage band serializes as null, meaning "and beyond".
+  if (req.method === 'GET' && path === '/api/catalog') {
+    return json(res, 200, {
+      maps: MAP_IDS.map((id) => getMap(id)), // full geometry, so the lobby can draw each map
+      difficulties: DIFFICULTIES,
+      ranks: ALL_RANKS.map((r) => ({ index: r.index, label: r.label, color: r.color })),
+      weapons: WEAPONS,
+      shields: Object.entries(SHIELDS).map(([id, s]) => ({ id: Number(id), ...s })),
+      buyTicks: BUY_TICKS,
+      roundTicks: C.ROUND_TICKS,
+      tickRate: TICK_RATE,
+    });
+  }
   if (req.method === 'GET' && path === '/api/viewer/matches') {
     const list = loadMatches(DATA_DIR)
       .map((f) => ({ ...summaryOf(f), branches: loadBranches(f.id).length }))
