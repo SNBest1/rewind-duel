@@ -4,8 +4,10 @@ import { createServer } from 'node:http';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { TICK_RATE, observe, visibleEvents, type Slot } from '@rewind/engine';
-import { MatchRunner } from './match';
+import { TICK_RATE, observe, visibleEvents, type Input, type Slot } from '@rewind/engine';
+import { MatchRunner, sanitizeInput } from './match';
+import { matchList, openSession, replayPayload } from './rewind';
+import type { RewindSession } from '@rewind/rewind';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const TICK_MS = Number(process.env.TICK_MS ?? 1000 / TICK_RATE);
@@ -76,7 +78,30 @@ if (existsSync(WEB_DIST)) {
   }
 }
 const http = createServer((req, res) => {
-  const path = (req.url ?? '/').split('?')[0];
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const path = url.pathname;
+
+  // Rewind viewer JSON API. Read-only: lists recorded matches and serves one match's replay payload.
+  if (path === '/api/matches') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(matchList(DATA_DIR)));
+  }
+  if (path === '/api/replay') {
+    const id = url.searchParams.get('id') ?? '';
+    // The id becomes a file path, so restrict it to the same safe charset match ids use.
+    if (!/^[a-z0-9-]{1,40}$/.test(id)) {
+      res.writeHead(400, { 'content-type': 'text/plain' });
+      return res.end('bad id');
+    }
+    try {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(replayPayload(DATA_DIR, id)));
+    } catch {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      return res.end('match not found');
+    }
+  }
+
   const asset = assets.get(path === '/' ? '/index.html' : path);
   if (!asset) {
     res.writeHead(404, { 'content-type': 'text/plain' });
@@ -86,10 +111,29 @@ const http = createServer((req, res) => {
   res.end(asset.body);
 });
 
-const wss = new WebSocketServer({ server: http, maxPayload: 1024 });
+// 1 KB is plenty for a live input, but a rewind message carries the trace and a snapshot, so allow 256 KB.
+const wss = new WebSocketServer({ server: http, maxPayload: 256 * 1024 });
 wss.on('connection', (ws) => {
   let room: Room | undefined;
   let slot: Slot = 0;
+  let rewind: RewindSession | undefined; // a rewind session on this socket, if any
+
+  /** Sends the human's fogged observation plus a full both-sides snapshot and the branch trace so far. */
+  const sendRewind = (events: unknown[] = []) => {
+    if (!rewind) return;
+    const s = rewind.state;
+    send(ws, {
+      t: 'rw',
+      obs: observe(s, rewind.human),
+      // The both-sides snapshot is allowed here: a rewind is the player reliving their own recorded match.
+      enemy: { x: s.players[rewind.opponent].x, y: s.players[rewind.opponent].y, aim: s.players[rewind.opponent].aim, hp: s.players[rewind.opponent].hp },
+      mode: rewind.mode,
+      handoffTick: rewind.handoffTick,
+      events,
+      trace: rewind.trace.slice(-200),
+      done: rewind.done,
+    });
+  };
 
   ws.on('message', (data) => {
     let msg: any;
@@ -117,6 +161,29 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'input' && room?.runner) {
       const r = room;
       lagged(() => r.runner?.setInput(slot, msg.input, msg.seq));
+    } else if (msg.t === 'rewind') {
+      // Open a rewind session: take control of `human` from `forkTick` of match `id`.
+      const id = String(msg.id ?? '');
+      const human = (msg.human === 1 ? 1 : 0) as Slot;
+      const forkTick = Number.isSafeInteger(msg.forkTick) ? Math.max(0, msg.forkTick as number) : 0;
+      if (!/^[a-z0-9-]{1,40}$/.test(id)) return send(ws, { t: 'error', msg: 'bad match id' });
+      try {
+        rewind = openSession(DATA_DIR, id, human, forkTick);
+        send(ws, { t: 'rwopen', human, opponent: rewind.opponent, forkTick, divergenceLimit: rewind.limit });
+        sendRewind();
+      } catch (e) {
+        send(ws, { t: 'error', msg: `could not open rewind: ${(e as Error).message}` });
+      }
+    } else if (msg.t === 'rwinput' && rewind) {
+      // One tick of the rewind session with the human's input.
+      const input: Input = sanitizeInput(msg.input);
+      const events = rewind.tick(input);
+      sendRewind(events);
+    } else if (msg.t === 'retry' && rewind) {
+      // End this branch, store its outcome, and reset to the fork tick.
+      const outcome = rewind.endBranch();
+      send(ws, { t: 'branch', outcome });
+      sendRewind();
     }
   });
 

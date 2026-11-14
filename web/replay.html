@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rewind Duel — Replay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Martian+Mono:wdth,wght@75..112.5,400..700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --oxide-950: #160f0c; --oxide-900: #1d1612; --oxide-800: #4b3a2e;
+      --bakelite: #8b735f; --label: #efe2c9; --dim: #9c8a78;
+      --vu: #ffb547; --ice: #7fd6e8; --rec: #e5483b;
+      --display: 'Big Shoulders Display', Impact, sans-serif;
+      --mono: 'Martian Mono', ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--oxide-950); color: var(--label); font: 13px/1.4 var(--mono); font-stretch: 87.5%; }
+    body { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr auto; height: 100vh; gap: 0; }
+    header { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid #3a2d25; }
+    header h1 { margin: 0; font: 900 24px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+    header .mode { color: var(--vu); font-weight: 700; letter-spacing: .1em; }
+    select, button { font: 700 12px var(--mono); background: var(--oxide-800); color: var(--label); border: 1px solid var(--dim); padding: 5px 9px; cursor: pointer; }
+    button:hover { background: var(--rec); }
+    button.on { background: var(--vu); color: var(--oxide-950); }
+    .grow { flex: 1; }
+    #stage { position: relative; display: grid; place-items: center; background: var(--oxide-900); overflow: hidden; }
+    #arena { background: var(--oxide-800); }
+    aside { border-left: 1px solid #3a2d25; display: flex; flex-direction: column; overflow: hidden; }
+    aside h2 { margin: 0; padding: 8px 12px; font: 700 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid #3a2d25; }
+    #trace { flex: 1; overflow-y: auto; font-size: 11px; }
+    .tl { display: grid; grid-template-columns: 52px 60px 1fr; gap: 6px; padding: 3px 12px; border-bottom: 1px solid #241b16; cursor: default; }
+    .tl:hover { background: #241b16; }
+    .tl .tk { color: var(--dim); }
+    .tl .kd { font-weight: 700; }
+    .tl.GHOST .kd { color: var(--dim); }
+    .tl.HANDOFF { background: #3a241f; }
+    .tl.HANDOFF .kd { color: var(--rec); }
+    .tl.CLONE .kd { color: var(--ice); }
+    .tl.CLONE { cursor: pointer; }
+    .tl.BREAKER .kd { color: var(--vu); }
+    .tl .rs { color: var(--label); }
+    footer { grid-column: 1 / -1; padding: 8px 16px; border-top: 1px solid #3a2d25; }
+    #scrub { width: 100%; }
+    .controls { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+    .markrow { position: relative; height: 14px; margin: 4px 0; }
+    .mk { position: absolute; width: 2px; height: 14px; top: 0; }
+    .mk.kill { background: var(--vu); } .mk.roundStart { background: var(--dim); }
+    .mk.roundEnd { background: var(--ice); } .mk.plant { background: var(--rec); width: 3px; }
+    .mk.defuse { background: var(--ice); } .mk.detonate { background: var(--rec); }
+    .hint { color: var(--dim); font-size: 11px; }
+    .side { display: flex; gap: 10px; align-items: center; }
+    .pop { position: absolute; right: 8px; bottom: 8px; width: 220px; background: var(--oxide-950); border: 1px solid var(--ice); padding: 8px; font-size: 11px; display: none; }
+    .pop.show { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Rewind</h1>
+    <select id="matchSel"></select>
+    <span id="who" class="hint"></span>
+    <span class="grow"></span>
+    <span class="side"><button id="visMe" class="on">my vision</button><button id="visThem">their vision</button></span>
+    <span id="mode" class="mode"></span>
+  </header>
+
+  <div id="stage">
+    <canvas id="arena"></canvas>
+    <div id="pop" class="pop"></div>
+  </div>
+
+  <aside>
+    <h2>Behavior trace</h2>
+    <div id="trace"></div>
+  </aside>
+
+  <footer>
+    <div class="markrow" id="markrow"></div>
+    <input id="scrub" type="range" min="0" max="100" value="0" step="1" />
+    <div class="controls">
+      <button id="play">play</button>
+      <span id="clock" class="hint">0.0s</span>
+      <span class="grow"></span>
+      <label class="hint">control <select id="slotSel"><option value="0">slot 0</option><option value="1">slot 1</option></select></label>
+      <button id="take">Take control from here</button>
+      <button id="retry" style="display:none">retry from fork</button>
+      <span id="rwstatus" class="hint"></span>
+    </div>
+  </footer>
+
+  <script type="module" src="/replay.ts"></script>
+</body>
+</html>

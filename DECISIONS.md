@@ -136,3 +136,21 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Why:** it is the spec's definition, and it is self-calibrating: a player with varied play has a looser limit than a repetitive one, measured on data the clone never saw so it reflects genuinely novel situations.
 - **Tradeoff:** needs at least one held-out match to be meaningful; with none held out it falls back to the p95 of the training data itself (tighter, but still a sane default for a standalone clone).
 - **Ruled out:** a fixed distance limit (meaningless across players and feature scalings); a confidence threshold on the vote (confidence can be high on a lone far neighbor, which is exactly the case the breaker must catch).
+
+## Phase 2 (rewind sessions, continued)
+
+### D23. The rewind session runs on the server; the browser never simulates it
+- **Chose:** `openSession` rebuilds the fork state in Node, drives the opponent (ghost -> clone), and streams back the human's fogged `Observation` plus a both-sides snapshot and the trace (`server/rewind.ts`, `server/index.ts`). The replay viewer draws snapshots fetched from `/api/replay`; the rewind draws the server's observation. A rewind tick is a clean WebSocket round trip, no client prediction.
+- **Why:** hard rule 3 — every replay, fork and sim runs in the runtime that ran the live match. Running the fork in the browser would need the enemy's full state (which the fog forbids) and a second engine.
+- **Tradeoff:** a rewind tick costs one round trip of input delay, unlike the live game which predicts own movement. Acceptable: a rewind is a deliberate, slow "what if", not a reflex duel.
+- **Ruled out:** predicting the rewind in the browser (breaks rule 3, needs enemy state).
+
+### D24. The replay viewer may see both sides; live fog is untouched
+- **Chose:** `buildSnapshots` exposes both players' positions for the replay viewer, and the rewind stream includes the opponent's position. The live server's `observe` fog is unchanged.
+- **Why:** a replay is the player reviewing their own finished match after the fact — hiding the enemy from a post-match review would make it useless. The clone still only ever acts on `observe` (D21), so "the clone only knows what the person could see" stays true even though the viewer shows everything.
+- **Tradeoff:** the both-sides snapshot is a separate, wider payload than a live `Observation`. Only the replay/rewind path uses it, never a live match.
+
+### D25. Each retry from the fork is a stored branch; the opponent clone holds out this very match
+- **Chose:** `RewindSession.endBranch()` records the outcome (winner, whether the human won, the handoff tick, the full trace) and resets to the fork for another attempt. `openSession` builds the opponent's clone from all of their matches except the one being relived, when they have more than one.
+- **Why:** the branches are the raw material for the Phase 4 "what you could have done" and the Phase 5 transfer test. Holding out the relived match stops the clone from simply replaying the exact game back at the player.
+- **Tradeoff:** a player with only one recorded match gets a clone trained on that match (no hold-out available), so its first branch can look suspiciously like the recording until the human diverges.
