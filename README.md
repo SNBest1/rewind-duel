@@ -2,7 +2,7 @@
 
 Rewind lets you jump back into any moment of a round you lost in **Rewind Duel**, a small top-down 1v1 tactical shooter, and replay it against a clone of your real opponent built from their own recorded games. Built for DevHacks 2026 (Riot Games Track 1, Gameplay Bots).
 
-**Status:** Phases 1–5 are done — the playable two-player game with recording and replay, rewind sessions (ghost → clone handoff with a behavior trace), k-nearest-neighbor clones with a circuit breaker, the what-if plan ranker, and the evidence evals. Phase 6 (first-person three.js view) is stretch and not built. See `spec.md` for the full plan and `DECISIONS.md` for design choices.
+**Status:** Phases 1–5 are done — the playable two-player game with recording and replay, rewind sessions (ghost → clone handoff with a behavior trace), k-nearest-neighbor clones with a circuit breaker, the what-if plan ranker, and the evidence evals. Phase 6 is partly done: a first-person three.js view of any recorded match (`/fpv.html`) with running ripples; the Cloudflare Durable Object migration is deliberately deferred (see `DECISIONS.md` D33). See `spec.md` for the full plan and `DECISIONS.md` for design choices.
 
 ## Architecture
 
@@ -134,6 +134,7 @@ Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timel
 
 - **Take control from here** opens a rewind session on the server. You drive your own slot; the opponent first replays its recorded inputs (ghost), and once your play diverges past the limit it hands off to a clone of the real opponent built from their other games. The circuit breaker drops to a basic bot when the clone hits a situation it has never seen. The behavior-trace panel logs every opponent decision; clicking a `CLONE` line shows the recorded moment(s) it copied.
 - **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, …) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
+- **first-person →** opens `/fpv.html`, a three.js first-person view of the same recorded match — walls extruded, the camera at one player's eye along their aim, a ripple on the floor whenever a player runs. It renders the 2D snapshots; the simulation stays 2D.
 
 ## Run the evals
 

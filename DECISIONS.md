@@ -185,3 +185,21 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** `positionError` runs the policy and the real inputs from the same start with the opponent held still, so the only difference is this player's own decisions (`eval/metrics.ts`). `transferCase` finds a round the player lost, forks ~3 s before it ended, and reports the recorded loss (first attempt), the player's own clone vs the opponent clone over N seeds (retries), and the best what-if plan (fresh attempt) (`eval/transfer.ts`).
 - **Why:** a fair position metric must isolate one player's movement from the fight's chaos. The transfer test maps the spec's "first attempt / retries / fresh attempt" onto what the recordings can actually support without new play sessions.
 - **Tradeoff:** freezing the opponent makes position error ignore how the real fight pushed the player around. The transfer "fresh attempt" is only as good as the scripted plan menu (D26), and at forks where no enemy is visible it shows survive-100%/win-0%.
+
+## Phase 6 (stretch)
+
+### D31. The first-person view reads the same 2D snapshots; it holds no game logic
+- **Chose:** `web/fpv.html` + `web/fpv.ts` fetch a match's snapshots from `/api/replay` and draw them with three.js — walls extruded into boxes, players as cylinders, the camera at one player's eye along their aim (map x,y become world x,z). It scrubs and plays the recorded snapshots; it never calls `step` or `observe` (`web/fpv.ts`).
+- **Why:** the spec says logic stays 2D. Reusing the replay payload means the 3D view is a pure renderer of the authoritative simulation, so it can never disagree with the 2D game or the clones.
+- **Tradeoff:** three.js adds ~530 KB to that page's bundle, so it is a separate entry loaded only when visited; the live game and replay viewer are unaffected.
+- **Not pixel-verified:** the WebGL render needs a real browser, which the sandbox could not open against localhost; the page serves, typechecks, bundles three.js, and the data pipeline (match list + snapshots) was confirmed over HTTP.
+
+### D32. "Sound ripples when running" is drawn as a floor ripple in the 3D view
+- **Chose:** a running player (moveState 2) spawns an expanding, fading ring at their feet in the FPV; walking and standing do not (`web/fpv.ts`).
+- **Why:** it makes the existing rule "running is loud and inaccurate, walking is quiet" legible without touching the engine. Audible footsteps would need an `observe` change (D18 left this open) and would change the fog-leak test's property, which is not worth it in the stretch window.
+- **Tradeoff:** the ripple is visual only and only in the FPV, not an audio cue in the live 2D client.
+
+### D33. The Cloudflare Durable Object migration stays deferred
+- **Chose:** left the server as the Node process behind a Cloudflare Tunnel (D14), not a Durable Object.
+- **Why:** a DO moves the engine to the Workers runtime, which risks hard rule 3 (every replay, fork and sim must run in the runtime that ran the live match) unless the whole pipeline moves with it, and it needs new storage for match files. That is a deploy-shaped project, not a final-hour change, and the evidence phases are the higher-value work.
+- **Ruled out for now:** doing it under time pressure and risking the determinism guarantee that the clones and replays depend on.

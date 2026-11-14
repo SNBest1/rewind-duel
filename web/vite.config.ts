@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         main: resolve(dir, 'index.html'),
         replay: resolve(dir, 'replay.html'),
+        fpv: resolve(dir, 'fpv.html'),
       },
     },
   },

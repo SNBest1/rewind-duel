@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rewind Duel — First-person view</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Martian+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --oxide-950:#160f0c; --label:#efe2c9; --dim:#9c8a78; --vu:#ffb547; --ice:#7fd6e8; --mono:'Martian Mono',ui-monospace,monospace; --display:'Big Shoulders Display',Impact,sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--oxide-950); color: var(--label); font: 13px/1.4 var(--mono); overflow: hidden; }
+    #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 14px; padding: 8px 14px; background: #160f0ccc; z-index: 10; }
+    #bar h1 { margin: 0; font: 900 20px var(--display); letter-spacing: .05em; text-transform: uppercase; }
+    select, button { font: 700 12px var(--mono); background: #4b3a2e; color: var(--label); border: 1px solid var(--dim); padding: 5px 9px; cursor: pointer; }
+    button.on { background: var(--vu); color: var(--oxide-950); }
+    .grow { flex: 1; }
+    #hint { color: var(--dim); }
+    #scrubwrap { position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 14px; background: #160f0ccc; z-index: 10; display: flex; gap: 12px; align-items: center; }
+    #scrub { flex: 1; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <h1>FPV</h1>
+    <select id="matchSel"></select>
+    <button id="eyeSel">eyes: slot 0</button>
+    <span id="hint">logic stays 2D — this is the same simulation, drawn in 3D</span>
+    <span class="grow"></span>
+    <a href="/replay.html" style="color:var(--ice)">← back to replay</a>
+  </div>
+  <div id="scrubwrap">
+    <button id="play">play</button>
+    <input id="scrub" type="range" min="0" max="100" value="0" />
+    <span id="clock" class="hint">0.0s</span>
+  </div>
+  <script type="module" src="/fpv.ts"></script>
+</body>
+</html>
