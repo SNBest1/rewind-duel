@@ -78,3 +78,14 @@ One entry per real design choice: what we chose, the tradeoff, what we ruled out
 - **Chose:** a room is two sockets. A disconnect ends the match and writes the file.
 - **Why:** the spec requires the file on disconnect, and reconnect logic is hours we do not have.
 - **Tradeoff:** a dropped wifi packet storm ends the match. The partial match is still saved and replayable.
+
+### D14. Public hosting is a Cloudflare Tunnel to the Node server, not a Durable Object
+- **Chose:** the Node server serves the built client and the WebSocket on one port; `cloudflared tunnel --url http://localhost:8080` gives it a public HTTPS URL.
+- **Why:** it took minutes, and the simulation stays in Node, so hard rule 3 (replays and forks run in the runtime that ran the live match) still holds and match files still land in `data/` for the clones.
+- **Tradeoff:** the laptop is the server. It must stay awake, the URL changes on every restart, and remote players get their full round trip as input delay.
+- **Ruled out for now:** a Durable Object (spec Phase 6). It moves the engine to a different runtime and needs new storage for match files, so it waits until the evidence phases are done.
+
+### D15. What changed when the server became reachable from the internet
+- **Chose:** room codes must match `[a-z0-9-]{1,16}` (the code is part of the match file name), WebSocket messages are capped at 1 KB, at most 50 rooms are open at once, and static files are served from an in-memory map of the build output by exact path.
+- **Why:** before this, a room code like `../../x` would have written a file outside `data/`. That was harmless on a trusted LAN and is not on a public URL.
+- **Tradeoff:** no accounts and no rate limiting. Anyone with the URL can fill rooms and write match files to disk until the 50-room cap; fine for a demo, not for leaving up.

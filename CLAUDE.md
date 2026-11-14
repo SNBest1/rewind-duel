@@ -19,7 +19,7 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 - `engine/map.ts` — the one map as data. Border walls sit just outside the 48x32 area so `rayWalls` is always finite.
 - `engine/replay.ts` — `replayMatch(file, untilTick)` rebuilds any tick. Phase 2 rewinds start here.
 - `server/match.ts` — `MatchRunner`: engine plus input log, no sockets and no clock, so it is unit-testable.
-- `server/index.ts` — WebSocket rooms and the 32 Hz loop. The only place that touches wall-clock time.
+- `server/index.ts` — HTTP + WebSocket on one port: serves `web/dist` (if built) and runs rooms and the 32 Hz loop. The only place that touches wall-clock time. It may be exposed publicly through a Cloudflare Tunnel, so treat every client message as hostile (see DECISIONS D15).
 - `web/main.ts` — canvas client. Input in, `Observation` out to pixels.
 
 ## Non-obvious things
@@ -33,7 +33,8 @@ Hackathon project (DevHacks 2026, hacking ends 11 AM Sunday). `spec.md` is the s
 
 ## Commands
 
-- `npm run server` (ws on 8080), `npm run web` (Vite on 5173)
+- `npm run server` (http + ws on 8080), `npm run web` (Vite on 5173, dev only), `npm run build` (client into `web/dist`, which the server serves)
+- Public URL: `cloudflared tunnel --url http://localhost:8080` after build + server. The client picks its WebSocket URL from the page origin unless it is on port 5173.
 - `npm test`, `npm run typecheck`, `npm run check:determinism`
 - `npm run replay -- data/<id>.json`
 - `npm run botmatch` — two scripted bots play a full match through the real server; `TICK_MS=2` on the server fast-forwards it.

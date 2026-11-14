@@ -55,7 +55,11 @@ $('join').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const status = $('status');
   status.textContent = 'Connecting...';
-  ws = new WebSocket(`ws://${location.hostname}:8080`);
+  // Under `npm run web` the page is on Vite's port and the game server is on 8080.
+  // Anywhere else (the built client, a tunnel) the same server serves both, so use the page's own origin.
+  ws = new WebSocket(location.port === '5173'
+    ? `ws://${location.hostname}:8080`
+    : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
   ws.onopen = () => ws!.send(JSON.stringify({
     t: 'join',
     name: ($('name') as HTMLInputElement).value,
@@ -77,7 +81,7 @@ $('join').addEventListener('submit', (ev) => {
     }
   };
   ws.onclose = () => {
-    if (!obs) status.textContent = 'Could not reach the server on port 8080';
+    if (!obs) status.textContent = 'Could not reach the game server';
   };
 });
 

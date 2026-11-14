@@ -43,7 +43,7 @@ npm run server
 npm run web
 ```
 
-Open `http://localhost:5173` in two tabs (or on two laptops on the same wifi, using the Network URL Vite prints). Enter a name and the **same room code** in both. The match starts when the second player joins. First to 5 rounds; sides swap after round 4.
+This is the development setup (Vite hot reload on 5173, game server on 8080). Open `http://localhost:5173` in two tabs (or on two laptops on the same wifi, using the Network URL Vite prints). Enter a name and the **same room code** in both. The match starts when the second player joins. First to 5 rounds; sides swap after round 4.
 
 | Key | Action |
 | --- | --- |
@@ -56,6 +56,26 @@ Open `http://localhost:5173` in two tabs (or on two laptops on the same wifi, us
 | F | hold to plant in A or B (attacker, 2 s, standing still) or defuse (defender, 4 s) |
 
 When the match ends or someone disconnects, the server writes `data/<room>-<timestamp>.json`.
+
+## Let other people play (public URL)
+
+The server can serve the built client itself, so the whole game is one port. Build once, start the server, then point a Cloudflare Tunnel at it:
+
+```bash
+npm run build
+```
+
+```bash
+npm run server
+```
+
+```bash
+cloudflared tunnel --url http://localhost:8080
+```
+
+`cloudflared` prints a `https://<random>.trycloudflare.com` URL. Anyone who opens it and enters the same room code plays on your machine, and their matches land in your `data/`. The URL lasts until you stop `cloudflared`, and changes every time you start it. Rebuild and restart the server after changing anything in `web/`.
+
+The game still runs in Node on your laptop, so the laptop has to stay awake and online. Players far away will feel their own latency, since there is no client prediction (DECISIONS D10).
 
 ## Replay a match
 
@@ -93,4 +113,4 @@ Not built yet (Phases 2 to 5).
 
 ## Environment
 
-See `.env.example`. `PORT` (default 8080) and `TICK_MS` (default 31.25) are read from the process environment by the server; nothing loads a `.env` file automatically. The web client assumes port 8080.
+See `.env.example`. `PORT` (default 8080) and `TICK_MS` (default 31.25) are read from the process environment by the server; nothing loads a `.env` file automatically. Under `npm run web` the client assumes the server is on port 8080; the built client uses whatever origin served it.

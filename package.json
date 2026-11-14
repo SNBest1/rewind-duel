@@ -13,6 +13,7 @@
   "scripts": {
     "server": "tsx server/index.ts",
     "web": "npm -w web run dev",
+    "build": "npm -w web run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "replay": "tsx server/replay.ts",
