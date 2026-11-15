@@ -37,7 +37,7 @@ const FRAME_STEP = 2;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 export function analyzeMatch(file: MatchFile, withFrames: boolean): MatchSummary | MatchDetail {
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const cur: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   const rounds: RoundInfo[] = [{ round: 1, attacker: 0, startTick: 0, endTick: file.ticks, winner: null, reason: null, kills: [] }];

@@ -71,7 +71,7 @@ export function nnDistancesOnMatches(clone: KnnClone, files: MatchFile[], player
   for (const file of files) {
     const slot = slotOf(file, playerName);
     if (slot === -1) continue;
-    let s: State = createMatch(file.seed, file.map);
+    let s: State = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
     const current: [Input, Input] = [IDLE, IDLE];
     let i = 0;
     while (s.tick < file.ticks) {

@@ -442,6 +442,22 @@ if (existsSync(WEB_DIST)) {
   }
 }
 
+// The Unity first-person client's WebGL build, when it has been built (DECISIONS D71). Served at /play/, and the
+// root redirects there, so a friend who opens the tunnel link gets the same 3D game. The 2D client moves to /classic.
+// Loaded the same way as the 2D client: once, by exact path. Built uncompressed, so no Content-Encoding is needed.
+const PLAY_DIR = fileURLToPath(new URL('../unity/RewindDuelLive/Build/WebGL/', import.meta.url));
+const PLAY_MIME: Record<string, string> = {
+  ...MIME, '.wasm': 'application/wasm', '.data': 'application/octet-stream', '.json': 'application/json',
+  '.png': 'image/png', '.ico': 'image/x-icon',
+};
+const playAssets = new Map<string, { type: string; body: Buffer }>();
+if (existsSync(PLAY_DIR)) {
+  for (const name of readdirSync(PLAY_DIR, { recursive: true }) as string[]) {
+    const type = PLAY_MIME[extname(name)];
+    if (type) playAssets.set('/' + name.replaceAll('\\', '/'), { type, body: readFileSync(PLAY_DIR + name) });
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown): void {
   // Read-only and public by design (it is the same data anyone in the match saw), so any origin may read it.
   // That is what lets the Vite dev page on :5173 call the game server on :8080.
@@ -540,7 +556,22 @@ const http = createServer((req, res) => {
     if (!file) return json(res, 404, { error: 'no such match' });
     return json(res, 200, { ...analyzeMatch(file, true), branches: loadBranches(file.id).map(({ inputs, ...b }) => b) });
   }
-  const asset = assets.get(path === '/' ? '/index.html' : path);
+  if (playAssets.size) {
+    if (path === '/' || path === '/play') {
+      res.writeHead(302, { location: '/play/' });
+      return res.end();
+    }
+    if (path.startsWith('/play/')) {
+      const file = playAssets.get(path === '/play/' ? '/index.html' : path.slice('/play'.length));
+      if (!file) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        return res.end('Not found');
+      }
+      res.writeHead(200, { 'content-type': file.type });
+      return res.end(file.body);
+    }
+  }
+  const asset = assets.get(path === '/' || path === '/classic' || path === '/classic/' ? '/index.html' : path);
   if (!asset) {
     res.writeHead(404, { 'content-type': 'text/plain' });
     return res.end(assets.size ? 'Not found' : 'Client not built. Run: npm run build');
@@ -706,5 +737,5 @@ wss.on('connection', (ws) => {
 });
 
 http.listen(PORT, () => {
-  console.log(`Rewind Duel server on http://0.0.0.0:${PORT} (${(1000 / TICK_MS).toFixed(0)} ticks/s, client ${assets.size ? 'built' : 'NOT built'})`);
+  console.log(`Rewind Duel server on http://0.0.0.0:${PORT} (${(1000 / TICK_MS).toFixed(0)} ticks/s, 2D client ${assets.size ? 'built' : 'NOT built'}, 3D client ${playAssets.size ? 'at /play/' : 'not built'})`);
 });

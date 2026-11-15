@@ -136,7 +136,14 @@ Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timel
 - **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, ΓÇª) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
 - **first-person ΓåÆ** opens `/fpv.html`, a three.js first-person view of the same recorded match ΓÇö walls extruded, the camera at one player's eye along their aim, a ripple on the floor whenever a player runs. It renders the 2D snapshots; the simulation stays 2D.
 
-There is also a **first-person Unity client** for the live game in a separate Unity project (`~/My project (1)`, open `Assets/RewindDuel/RewindDuel.unity` and press Play). It plays every mode against this server and reads maps and weapons from `GET /api/catalog` (DECISIONS D70).
+There is also a **first-person 3D client** for the live game, in `unity/RewindDuelLive` (Unity 6000.6.9f1). It plays every mode against this server and reads maps and weapons from `GET /api/catalog` (DECISIONS D70). Open `Assets/RewindDuel/RewindDuel.unity` and press Play, or build it for the browser:
+
+1. In Unity, build the WebGL target to `unity/RewindDuelLive/Build/WebGL` (git-ignored).
+2. Restart `npm run server`. It serves the 3D game at `/play/`, sends `/` there, and keeps the 2D client at `/classic` (DECISIONS D71).
+
+With the WebGL build in place, anyone who opens your tunnel link plays the same 3D game you do.
+
+Its **Replays** tab plays any recorded match back in 3D from behind either player. A timeline shows how every round went, and **Take control** puts you into that exact moment: the opponent repeats what really happened until you change it, then the AI takes over.
 
 There is also a **Unity 3D viewer** of recorded matches under `unity/RewindDuel3D` (scaffolded from the `unity` CLI). Like the three.js view it is a renderer of exported snapshots, not a second engine. Build its data with `npm run export:unity`, then see `unity/README.md` to generate the scene and run it.
 

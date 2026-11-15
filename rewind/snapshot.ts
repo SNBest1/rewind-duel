@@ -36,7 +36,7 @@ function snap(s: State): Snapshot {
  */
 export function buildSnapshots(file: MatchFile, stride = 1): Snapshot[] {
   const out: Snapshot[] = [];
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   while (s.tick < file.ticks) {

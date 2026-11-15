@@ -13,7 +13,7 @@ export type Marker =
 /** Every marker in a match, in tick order. A full replay, so markers line up with the exact state at that tick. */
 export function timelineMarkers(file: MatchFile): Marker[] {
   const markers: Marker[] = [];
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   const take = (events: GameEvent[]) => {

@@ -36,7 +36,7 @@ export function isSelfMatch(file: MatchFile): boolean {
  */
 export function samplesFromMatch(file: MatchFile, slot: Slot, playerName: string): Sample[] {
   const samples: Sample[] = [];
-  let s: State = createMatch(file.seed, file.map);
+  let s: State = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   let prevAction = -1;

@@ -1,0 +1,14 @@
+# Unity-generated, machine-local, or rebuildable: never commit these.
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/UserSettings/
+/.vscode/
+*.csproj
+*.sln
+*.slnx
+*.user
+.DS_Store

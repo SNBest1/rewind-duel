@@ -14,7 +14,7 @@ export type Sample = { f: number[]; a: Action; ref: TraceRef };
 /** Every decision one slot made in one match: replay it, and every 4 live ticks record what they saw and did. */
 export function samplesFromMatch(file: MatchFile, slot: Slot): Sample[] {
   const out: Sample[] = [];
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const cur: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   let prev = IDLE_ACTION;

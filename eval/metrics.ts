@@ -37,7 +37,7 @@ export function collectRecords(file: MatchFile, slot: Slot, policy: Policy, hori
   const realInputs = recordedInputMap(file, slot);
   const records: DecisionRecord[] = [];
 
-  let s: State = createMatch(file.seed, file.map);
+  let s: State = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   while (s.tick < file.ticks) {
@@ -220,7 +220,7 @@ function runFrom(start: State, slot: Slot, other: Slot, horizon: number, recorde
 /** Handoff rate: the share of rewind decision ticks the guarded clone spends under the circuit breaker. */
 export function handoffRate(file: MatchFile, slot: Slot, guarded: GuardedClone): { ticks: number; broke: number; rate: number } {
   let ticks = 0, broke = 0;
-  let s: State = createMatch(file.seed, file.map);
+  let s: State = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const current: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   while (s.tick < file.ticks) {

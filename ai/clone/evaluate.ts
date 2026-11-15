@@ -12,7 +12,7 @@ export type Agreement = { move: number; fire: number; n: number };
  */
 export function agreement(makePolicy: () => Policy, file: MatchFile, slot: Slot): Agreement {
   const samples = new Map<number, Sample>(samplesFromMatch(file, slot).map((s) => [s.ref.tick, s]));
-  let s = createMatch(file.seed, file.map);
+  let s = createMatch(file.seed, file.map, file.rules ?? 'classic'); // the rules it was played under, or it replays differently
   const cur: [Input, Input] = [IDLE, IDLE];
   let i = 0;
   let p = makePolicy();
