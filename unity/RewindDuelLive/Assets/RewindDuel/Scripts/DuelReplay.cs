@@ -116,6 +116,7 @@ namespace RewindDuel
         {
             if (rpBots != null) foreach (var b in rpBots) if (b) Destroy(b.gameObject);
             if (rpRings != null) foreach (var r in rpRings) if (r) { Destroy(r.GetComponent<Renderer>().sharedMaterial); Destroy(r.gameObject); }
+            ClearDeathMarks();
             ClearCoach();
             rpBots = null;
             rpRings = null;
@@ -255,6 +256,7 @@ namespace RewindDuel
                 default: ThirdPersonCamera(fx0, fy0, faim); break;
             }
             CoachUpdate();
+            SyncDeathMarks();
             // In POV the camera is inside the watched player's body, so it is hidden.
             if (rpCamMode == 1 && rpBots[rpFollow]) rpBots[rpFollow].gameObject.SetActive(false);
         }
@@ -318,7 +320,7 @@ namespace RewindDuel
         float len = flat.magnitude;
         if (len > 0.01f)
         {
-            float hit = WallHit((float)fx0, (float)fy0, flat / len, len);
+            float hit = Mathf.Min(WallHit((float)fx0, (float)fy0, flat / len, len), SignHit((float)fx0, (float)fy0, flat / len, len));
             if (hit < len)
             {
                 float keep = Mathf.Max(0.35f, hit - 0.35f) / len;
@@ -649,6 +651,7 @@ namespace RewindDuel
             Text(new Rect(w / 2 - 80 * S, by + 4 * S, 160 * S, 26 * S), "REPLAY", St(20, true, TextAnchor.MiddleCenter, true), Gfx.Label);
             Text(new Rect(w / 2 - 120 * S, by + 28 * S, 240 * S, 20 * S), mapName.ToUpperInvariant() + " · ROUND " + (ri + 1), St(11, true, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.6f));
 
+            DrawWorldTags();
             DrawBanner(w, h);
             DrawAttemptBanner(w, by + 64 * S);
 
@@ -693,6 +696,7 @@ namespace RewindDuel
             foreach (var e in rpEvents)
                 if (Json.Str(e, "type") == "plant") Fill(new Rect(X(Json.Num(e, "tick")) - 3 * S, bar.yMax + 3 * S, 6 * S, 6 * S), Gfx.Gold);
             DrawAttemptMarks(bar, t => X(t));
+            DrawRoundZoom(new Rect(bar.x, bar.yMax + 24 * S, bar.width, 6 * S), ri);
             // The playhead.
             float hx = X(rpTick);
             Fill(new Rect(hx - 1.5f * S, bar.y - 12 * S, 3 * S, bar.height + 24 * S), Color.white);

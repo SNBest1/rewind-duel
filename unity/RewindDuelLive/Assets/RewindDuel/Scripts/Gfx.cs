@@ -218,6 +218,8 @@ namespace RewindDuel
             ['B'] = new[] { "####.", "#...#", "#...#", "####.", "#...#", "#...#", "####." },
             ['C'] = new[] { ".####", "#....", "#....", "#....", "#....", "#....", ".####" },
             ['D'] = new[] { "####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####." },
+            // The replay's death marker on the floor.
+            ['X'] = new[] { "#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#" },
         };
 
         /// White letter on transparent, for an alpha-clipped material. Unknown letters render as a filled block.
