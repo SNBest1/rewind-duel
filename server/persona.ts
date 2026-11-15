@@ -15,7 +15,7 @@
 import { IDLE, type Input, type Observation, type Slot } from '@rewind/engine';
 import { DECISION_TICKS, MOVES } from '../ai/clone/features';
 import type { KnnClone } from '../ai/clone/knn';
-import type { Decision, Policy, TraceLine } from '../ai/clone/policy';
+import type { Decision, Policy, TraceLine, TraceRef } from '../ai/clone/policy';
 import { AiPlayer, type Rng } from './ai';
 import type { Brain } from './brain';
 import { rankOf } from './ranks';
@@ -79,12 +79,12 @@ export class PersonaPolicy implements Policy {
       // the body mid-fight was measured and lost most duels (eval/persona-eval.ts, DECISIONS D75).
     }
     if (side === 'person') this.personTicks++;
-    this.explain(o, side, known, agree);
+    this.explain(o, side, known, agree, me.because[0]);
     return { input, confidence: side === 'person' ? agree : 1, because: side === 'person' ? me.because : [] };
   }
 
   /** A trace line when control changes hands, and at most once a second while the person drives. */
-  private explain(o: Observation, side: 'person' | 'ai', known: boolean, agree: number): void {
+  private explain(o: Observation, side: 'person' | 'ai', known: boolean, agree: number, ref?: TraceRef): void {
     if (o.tick % DECISION_TICKS !== 0) return;
     const changed = side !== this.lastSide;
     if (!changed && (side === 'ai' || o.tick - this.lastSay < 32)) return;
@@ -97,6 +97,8 @@ export class PersonaPolicy implements Policy {
       this.trace({
         tick: o.tick, actor: 'CLONE', type: 'MIX',
         reason: `${what} like ${who} (${Math.round(agree * 100)}% of their similar moments agree)`,
+        // The closest recorded moment the move was copied from, so the trace can point at real play.
+        ref,
       });
     } else {
       this.trace({

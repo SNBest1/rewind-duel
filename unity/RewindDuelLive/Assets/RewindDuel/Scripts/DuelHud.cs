@@ -738,6 +738,9 @@ namespace RewindDuel
                 var t = trace[trace.Count - n + i];
                 float y = r.y + 26 * S + i * 34 * S;
                 string head = (Json.Str(t, "actor") ?? "") + " · " + (Json.Str(t, "type") ?? "");
+                // A copied decision names the real moment it came from: which recorded match, and when in it.
+                var src = Json.Obj(t, "ref");
+                if (src != null) head += "  ·  copied from " + (Json.Str(src, "match") ?? "?") + " at " + Clock((float)Json.Num(src, "tick"));
                 Text(new Rect(r.x + 14 * S, y, pw - 24 * S, 14 * S), head, St(10, true, TextAnchor.UpperLeft, true), Gfx.Violet, false);
                 Text(new Rect(r.x + 14 * S, y + 13 * S, pw - 24 * S, 18 * S), Json.Str(t, "reason") ?? "", St(11, false, TextAnchor.UpperLeft), new Color(1, 1, 1, 0.82f), false);
             }

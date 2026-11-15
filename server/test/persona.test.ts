@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { observe, type MatchFile } from '@rewind/engine';
 import { buildClone } from '../../ai/clone/knn';
+import type { TraceLine } from '../../ai/clone/policy';
 import { BasicBot, seededRng } from '../ai';
 import { blankBrain } from '../brain';
 import { MatchRunner } from '../match';
@@ -21,7 +22,8 @@ describe('the person + AI hybrid', () => {
   const built = buildClone('pat', [recording(11), recording(12)]);
 
   it('takes moves from the person out of fights and leaves every fight to the AI', () => {
-    const persona = new PersonaPolicy(built.clone.fresh(), built.limit, 0.5, 0, 'duel', blankBrain('you'), seededRng(3));
+    const lines: TraceLine[] = [];
+    const persona = new PersonaPolicy(built.clone.fresh(), built.limit, 0.5, 0, 'duel', blankBrain('you'), seededRng(3), (t) => lines.push(t));
     const runner = new MatchRunner('t', 77, ['pat', 'you'], 'duel', undefined, 'valorant');
     const rival = new BasicBot(1, 'duel', seededRng(4));
     let personMoves = 0;
@@ -41,6 +43,10 @@ describe('the person + AI hybrid', () => {
     expect(fights).toBeGreaterThan(0);
     expect(personMoves).toBeGreaterThan(0);
     expect(persona.personTicks).toBe(personMoves);
+    // The trace says which half decided, and a copied move names the recorded moment it came from.
+    const copied = lines.filter((t) => t.type === 'MIX' && t.actor === 'CLONE');
+    expect(copied.length).toBeGreaterThan(0);
+    expect(copied.every((t) => t.ref && t.ref.match.startsWith('pat-'))).toBe(true);
   });
 
   it('is named for both halves', () => {
