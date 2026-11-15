@@ -102,6 +102,8 @@ namespace RewindDuel
         {
             var rows = CoachRows();
             if (i < 0 || i >= rows.Count) return;
+            // Picking the plan already shown goes back to what really happened.
+            if (i == coachPick) { coachPick = -1; coachFrames = null; ClearCoachGhosts(); return; }
             coachPick = i;
             coachFrames = Json.Arr(rows[i], "frames");
             EnsureCoachGhosts();
@@ -153,12 +155,16 @@ namespace RewindDuel
             var first = (List<object>)coachFrames[0];
             var last = (List<object>)coachFrames[coachFrames.Count - 1];
             if (tick < (double)first[0] || tick > (double)last[0]) return null;
-            // Plan frames are every 2 ticks from the fork, the same layout as the replay's.
-            float f = (tick - (float)(double)first[0]) / 2f;
-            int i = Mathf.Clamp(Mathf.FloorToInt(f), 0, coachFrames.Count - 1), j = Mathf.Min(i + 1, coachFrames.Count - 1);
+            // Plan frames are every 2 ticks from the fork, except the last, which is the tick the plan ended on;
+            // so the pair around `tick` is found by tick, not by index arithmetic.
+            int i = Mathf.Clamp(Mathf.FloorToInt((tick - (float)(double)first[0]) / 2f), 0, coachFrames.Count - 1);
+            while (i > 0 && (double)((List<object>)coachFrames[i])[0] > tick) i--;
+            while (i + 1 < coachFrames.Count && (double)((List<object>)coachFrames[i + 1])[0] <= tick) i++;
+            int j = Mathf.Min(i + 1, coachFrames.Count - 1);
             var a = (List<object>)coachFrames[i];
             var b = (List<object>)coachFrames[j];
-            float k = Mathf.Clamp01(f - i);
+            double ta = (double)a[0], tb = (double)b[0];
+            float k = tb > ta ? Mathf.Clamp01((float)((tick - ta) / (tb - ta))) : 0f;
             var r = new double[a.Count];
             for (int n = 0; n < a.Count; n++)
             {
@@ -170,9 +176,26 @@ namespace RewindDuel
 
         float coachLastTick;
 
+        /// The chosen plan's frame while it plays, or null (no plan picked, or outside its five seconds).
+        double[] PlanFrameAt(float tick) => coachPick >= 0 ? CoachFrameAt(tick) : null;
+
+        /// While a plan plays, its own shots, kills and flash pops play too.
+        void PlanEvents(float from, float to)
+        {
+            if (coachPick < 0) return;
+            var evs = Json.Arr(CoachRows()[coachPick], "events");
+            if (evs == null) return;
+            foreach (var e in evs)
+            {
+                double t = Json.Num(e, "tick");
+                if (t > from && t <= to) ReplayEvent(e);
+            }
+        }
+
         void CoachUpdate()
         {
             if (coachGhosts == null) return;
+            if (rpTick > coachLastTick && rpTick - coachLastTick < TickRate) PlanEvents(coachLastTick, rpTick);
             // Crossing the plan's last frame in playback says how it ended.
             if (coachFrames != null && coachFrames.Count > 0 && coachPick >= 0)
             {
@@ -181,25 +204,31 @@ namespace RewindDuel
                 {
                     var row = CoachRows()[coachPick];
                     Banner(coachPick == 0 ? "WHAT REALLY HAPPENED" : (Json.Str(row, "name") ?? "PLAN").ToUpperInvariant(), Json.Str(row, "reason") ?? "", Gfx.Ally, 2.2f);
+                    // Stop on the plan's result, so it is read before the recording takes over again.
+                    rpPlaying = false;
+                    rpTick = (float)end;
                 }
             }
             coachLastTick = rpTick;
-            var gf = CoachFrameAt(rpTick);
+            var gf = PlanFrameAt(rpTick) != null ? RealFrameAt(rpTick) : null;
             for (int s = 0; s < 2; s++)
             {
                 bool show = gf != null && gf[4 + s * 5] > 0;
+                // Right at the camera a ghost would only fill the screen.
+                if (show && (W(gf[1 + s * 5], gf[2 + s * 5], 0.9f) - cam.transform.position).sqrMagnitude < 25f) show = false;
                 if (coachGhosts[s].gameObject.activeSelf != show) coachGhosts[s].gameObject.SetActive(show);
                 if (!show) continue;
                 coachGhosts[s].position = W(gf[1 + s * 5], gf[2 + s * 5], 0.9f);
                 var c = s == rpFollow ? Gfx.Ally : Gfx.Enemy;
-                coachMats[s].SetColor("_BaseColor", new Color(c.r, c.g, c.b, 1f) * (0.9f + 0.3f * Mathf.Sin(Time.time * 6f)));
+                coachMats[s].SetColor("_BaseColor", new Color(c.r, c.g, c.b, 1f) * (0.45f + 0.15f * Mathf.Sin(Time.time * 4f)));
             }
         }
 
         /// Ghost dots on the tactical map, hollow so they never read as the real players.
         void DrawCoachOnMap(Func<double, double, Vector2> M)
         {
-            var gf = CoachFrameAt(rpTick);
+            // The plan is drawn as the players; the hollow marks are where they really were.
+            var gf = PlanFrameAt(rpTick) != null ? RealFrameAt(rpTick) : null;
             if (gf == null) return;
             for (int s = 0; s < 2; s++)
             {
@@ -262,6 +291,17 @@ namespace RewindDuel
                 if (ev.type == EventType.MouseDown && ev.button == 0 && rh) { ev.Use(); PickPlan(i); }
                 ry += rowH + 4 * S;
             }
+        }
+
+        /// While a plan plays: whose plan, and how to get back.
+        void DrawPlanBanner(float w, float y)
+        {
+            if (PlanFrameAt(rpTick) == null) return;
+            var row = CoachRows()[coachPick];
+            string name = coachPick == 0 ? "WHAT YOU DID, REPLAYED AGAINST THE CLONE" : "PLAN · " + (Json.Str(row, "name") ?? "?").ToUpperInvariant();
+            var r = new Rect(w / 2 - 260 * S, y, 520 * S, 26 * S);
+            Panel(r, new Color(Gfx.Ally.r * 0.3f, Gfx.Ally.g * 0.3f, Gfx.Ally.b * 0.3f, 0.92f));
+            Text(r, name + "  ·  faint shapes are what really happened  ·  click the plan again to return", St(11, true, TextAnchor.MiddleCenter, true), Gfx.Label, false);
         }
 
         float RoundStartTick()

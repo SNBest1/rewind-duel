@@ -131,8 +131,12 @@ namespace RewindDuel
             while (rpEventIdx < rpEvents.Count && Json.Num(rpEvents[rpEventIdx], "tick") <= rpTick) rpEventIdx++;
         }
 
+        /// What the replay shows at a tick: the coach's chosen plan inside its five seconds, otherwise the recording.
+        /// Every view (bodies, camera, map, tags, fog) reads this, so a picked plan replaces what happened.
+        double[] FrameAt(float tick) => PlanFrameAt(tick) ?? RealFrameAt(tick);
+
         /// Frame values at a tick, interpolated between the two recorded frames around it.
-        double[] FrameAt(float tick)
+        double[] RealFrameAt(float tick)
         {
             float f = tick / rpStep;
             int i = Mathf.Clamp(Mathf.FloorToInt(f), 0, rpFrames.Count - 1);
@@ -192,7 +196,7 @@ namespace RewindDuel
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
                 if (kb.periodKey.wasPressedThisFrame) JumpKill(+1);
                 if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) { if (rpBranch > 0) BackToOriginal(); else TakeControl(); return; }
-                if (kb.escapeKey.wasPressedThisFrame) { LeaveReplay(); return; }
+                if (kb.escapeKey.wasPressedThisFrame) { if (FreeLooking) SetFreeLook(false); else LeaveReplay(); return; }
             }
             if (mouse != null)
             {
@@ -209,7 +213,11 @@ namespace RewindDuel
             }
             // Effects for what happened since the last frame, only during normal playback.
             if (rpTick > before && rpTick - before < TickRate)
-                while (rpEventIdx < rpEvents.Count && Json.Num(rpEvents[rpEventIdx], "tick") <= rpTick) ReplayEvent(rpEvents[rpEventIdx++]);
+                while (rpEventIdx < rpEvents.Count && Json.Num(rpEvents[rpEventIdx], "tick") <= rpTick)
+                {
+                    var e = rpEvents[rpEventIdx++];
+                    if (PlanFrameAt((float)Json.Num(e, "tick")) == null) ReplayEvent(e);
+                }
             else if (rpTick < before || rpTick - before >= TickRate) SeekReplay(rpTick);
 
             var fr = FrameAt(rpTick);
@@ -304,6 +312,8 @@ namespace RewindDuel
                 freeYaw = e.y;
                 freePitch = e.x > 180 ? e.x - 360 : e.x;
             }
+            // The free camera looks with the mouse like a shooter: the cursor is captured on entering it.
+            SetFreeLook(rpCamMode == 2);
             rpCam = Vector3.zero;
         }
 
@@ -341,10 +351,20 @@ namespace RewindDuel
             cam.transform.SetPositionAndRotation(eye, Quaternion.Euler(0, YawFromAim(aim), 0));
         }
 
-        /// Fly anywhere: WASD to move, Q and E for down and up, Shift for speed, right-drag to look.
+        /// Captures the cursor for mouse look, or gives it back for the timeline and panels.
+        void SetFreeLook(bool on)
+        {
+            Cursor.lockState = on ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !on;
+        }
+
+        bool FreeLooking => rpCamMode == 2 && Cursor.lockState == CursorLockMode.Locked;
+
+        /// Fly anywhere: WASD to move, Q and E for down and up, Shift for speed. The mouse looks around while it is
+        /// captured (Esc releases it, a click on the view captures it again); right-drag looks without capturing.
         void FreeCamera(Keyboard kb, Mouse mouse)
         {
-            if (mouse != null && mouse.rightButton.isPressed)
+            if (mouse != null && (FreeLooking || mouse.rightButton.isPressed))
             {
                 var d = mouse.delta.ReadValue() * 0.15f;
                 freeYaw += d.x;
@@ -614,6 +634,7 @@ namespace RewindDuel
 
         void LeaveReplay()
         {
+            SetFreeLook(false);
             ClearReplayActors();
             rpDetail = null;
             rpFrames = null;
@@ -654,6 +675,7 @@ namespace RewindDuel
             DrawWorldTags();
             DrawBanner(w, h);
             DrawAttemptBanner(w, by + 64 * S);
+            DrawPlanBanner(w, by + 64 * S);
 
             if (rpCoachOpen) DrawCoach(w, h);
             else DrawRoundList(w, h);
@@ -732,9 +754,19 @@ namespace RewindDuel
                 rpBranch > 0 ? "This is a rewind attempt: the match as it really went up to the fork, then what was played from there."
                 : "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · F what they saw · C coach · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera (free: mouse looks) · M map · F what they saw · C coach · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
+
+            if (rpCamMode == 2)
+            {
+                if (ev.type == EventType.MouseDown && ev.button == 0 && !FreeLooking) { SetFreeLook(true); ev.Use(); }
+                if (FreeLooking) Fill(new Rect(w / 2 - 2 * S, h / 2 - 2 * S, 4 * S, 4 * S), new Color(1, 1, 1, 0.8f));
+                var hint = new Rect(w / 2 - 230 * S, py - 72 * S, 460 * S, 22 * S);
+                if (string.IsNullOrEmpty(status))
+                    Text(hint, FreeLooking ? "FREE CAMERA · mouse to look · WASD QE to fly · Shift faster · Esc frees the cursor" : "FREE CAMERA · click the view to look around",
+                        St(12, true, TextAnchor.MiddleCenter, true), Gfx.Label);
+            }
         }
     }
 }
