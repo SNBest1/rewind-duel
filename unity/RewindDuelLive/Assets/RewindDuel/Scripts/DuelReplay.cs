@@ -112,6 +112,7 @@ namespace RewindDuel
         {
             if (rpBots != null) foreach (var b in rpBots) if (b) Destroy(b.gameObject);
             if (rpRings != null) foreach (var r in rpRings) if (r) { Destroy(r.GetComponent<Renderer>().sharedMaterial); Destroy(r.gameObject); }
+            ClearCoach();
             rpBots = null;
             rpRings = null;
             rpLights = null;
@@ -180,6 +181,7 @@ namespace RewindDuel
                 if (kb.vKey.wasPressedThisFrame) CycleCamera();
                 if (kb.mKey.wasPressedThisFrame) rpTacMap = !rpTacMap;
                 if (kb.fKey.wasPressedThisFrame) rpFog = !rpFog;
+                if (kb.cKey.wasPressedThisFrame) ToggleCoach();
                 if (kb.leftBracketKey.wasPressedThisFrame) JumpRound(-1);
                 if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
@@ -248,6 +250,7 @@ namespace RewindDuel
                 case 3: OverheadCamera(); break;
                 default: ThirdPersonCamera(fx0, fy0, faim); break;
             }
+            CoachUpdate();
             // In POV the camera is inside the watched player's body, so it is hidden.
             if (rpCamMode == 1 && rpBots[rpFollow]) rpBots[rpFollow].gameObject.SetActive(false);
         }
@@ -476,7 +479,7 @@ namespace RewindDuel
             var panel = new Rect(x, y, pw, ph);
             Panel(panel, new Color(0.04f, 0.045f, 0.06f, 0.84f));
             Text(new Rect(x + 14 * S, y + 8 * S, pw, 18 * S), "ROUNDS", St(12, true, TextAnchor.UpperLeft, true), Gfx.Label, false);
-            Text(new Rect(x, y + 8 * S, pw - 14 * S, 18 * S), "[ ]  , .", St(10, false, TextAnchor.UpperRight), new Color(1, 1, 1, 0.4f), false);
+            Text(new Rect(x, y + 8 * S, pw - 14 * S, 18 * S), "[ ]  , .   C COACH", St(10, false, TextAnchor.UpperRight), new Color(1, 1, 1, 0.4f), false);
             float ry = y + 32 * S;
             var ev = Event.current;
             for (int i = 0; i < rpRounds.Count && ry + rowH <= panel.yMax; i++)
@@ -625,7 +628,8 @@ namespace RewindDuel
 
             DrawBanner(w, h);
 
-            DrawRoundList(w, h);
+            if (rpCoachOpen) DrawCoach(w, h);
+            else DrawRoundList(w, h);
             DrawTacMap(w, h);
             if (rpFog)
             {
@@ -697,7 +701,7 @@ namespace RewindDuel
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
                 "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · F what they saw · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · F what they saw · C coach · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
         }

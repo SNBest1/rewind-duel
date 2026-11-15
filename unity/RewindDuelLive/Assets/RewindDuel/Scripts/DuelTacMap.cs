@@ -146,6 +146,8 @@ namespace RewindDuel
                 Fill(new Rect(at.x - pulse / 2, at.y - pulse / 2, pulse, pulse), Gfx.Rec);
             }
 
+            DrawCoachOnMap((x, y) => M(x, y));
+
             // Site letters under the players, so a name never hides behind one.
             foreach (var site in map.sites)
             {
