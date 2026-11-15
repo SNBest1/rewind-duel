@@ -27,6 +27,7 @@ namespace RewindDuel
         float rpTick, rpSpeed = 1f, rpOrbit, rpZoom = 1f;
         bool rpPlaying = true, rpLoading, rpScrubbing;
         Transform[] rpBots;
+        Transform[] rpRings; // overhead markers under each player
         Light[] rpLights;
         Vector3 rpCam;
         // Where to come back to after a rewind ends.
@@ -71,7 +72,18 @@ namespace RewindDuel
             ShowWeapon(-1);
             rpBots = new Transform[2];
             rpLights = new Light[2];
-            for (int s = 0; s < 2; s++) rpBots[s] = MakeBot("Replay " + rpNames[s], Gfx.Ally, out rpLights[s]);
+            rpRings = new Transform[2];
+            for (int s = 0; s < 2; s++)
+            {
+                rpBots[s] = MakeBot("Replay " + rpNames[s], Gfx.Ally, out rpLights[s]);
+                var ring = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                Destroy(ring.GetComponent<Collider>());
+                ring.name = "Marker " + rpNames[s];
+                ring.transform.SetParent(world, false);
+                ring.transform.localScale = Vector3.one * 3.2f;
+                ring.GetComponent<Renderer>().sharedMaterial = Gfx.Additive(Color.white, Gfx.Ring);
+                rpRings[s] = ring.transform;
+            }
             ColourReplayBots();
             SeekReplay(Mathf.Clamp(startTick, 0, Mathf.Max(0, rpTicks - 1)));
             rpPlaying = true;
@@ -88,13 +100,20 @@ namespace RewindDuel
         void ColourReplayBots()
         {
             if (rpLights == null) return;
-            for (int s = 0; s < 2; s++) if (rpLights[s]) rpLights[s].color = s == rpFollow ? Gfx.Ally : Gfx.Enemy;
+            for (int s = 0; s < 2; s++)
+            {
+                var c = s == rpFollow ? Gfx.Ally : Gfx.Enemy;
+                if (rpLights[s]) rpLights[s].color = c;
+                if (rpRings != null && rpRings[s]) rpRings[s].GetComponent<Renderer>().sharedMaterial.SetColor("_BaseColor", c * 2.5f);
+            }
         }
 
         void ClearReplayActors()
         {
             if (rpBots != null) foreach (var b in rpBots) if (b) Destroy(b.gameObject);
+            if (rpRings != null) foreach (var r in rpRings) if (r) { Destroy(r.GetComponent<Renderer>().sharedMaterial); Destroy(r.gameObject); }
             rpBots = null;
+            rpRings = null;
             rpLights = null;
         }
 
@@ -156,6 +175,7 @@ namespace RewindDuel
                 if (kb.upArrowKey.wasPressedThisFrame) rpSpeed = Mathf.Min(8f, rpSpeed * 2f);
                 if (kb.downArrowKey.wasPressedThisFrame) rpSpeed = Mathf.Max(0.25f, rpSpeed / 2f);
                 if (kb.tabKey.wasPressedThisFrame) { rpFollow = 1 - rpFollow; ColourReplayBots(); }
+                if (kb.vKey.wasPressedThisFrame) CycleCamera();
                 if (kb.leftBracketKey.wasPressedThisFrame) JumpRound(-1);
                 if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
@@ -165,7 +185,7 @@ namespace RewindDuel
             }
             if (mouse != null)
             {
-                if (mouse.rightButton.isPressed) rpOrbit += mouse.delta.ReadValue().x * 0.25f;
+                if (rpCamMode == 0 && mouse.rightButton.isPressed) rpOrbit += mouse.delta.ReadValue().x * 0.25f;
                 float wheel = mouse.scroll.ReadValue().y;
                 if (Mathf.Abs(wheel) > 0.01f) rpZoom = Mathf.Clamp(rpZoom - Mathf.Sign(wheel) * 0.1f, 0.5f, 2.5f);
             }
@@ -189,6 +209,11 @@ namespace RewindDuel
                 bool alive = hp > 0;
                 if (b.gameObject.activeSelf != alive) b.gameObject.SetActive(alive);
                 if (alive) b.SetPositionAndRotation(W(x, y, 0) + Vector3.up * Mathf.Sin(Time.time * 3f + s) * 0.05f, Quaternion.Euler(0, YawFromAim(aim), 0));
+                // Overhead, a player is a dot from that height, so a ring in their colour marks them.
+                var ring = rpRings[s];
+                bool showRing = alive && rpCamMode == 3;
+                if (ring.gameObject.activeSelf != showRing) ring.gameObject.SetActive(showRing);
+                if (showRing) ring.SetPositionAndRotation(W(x, y, 0.06f), Quaternion.Euler(90, 0, 0));
             }
 
             // Smokes alive at this frame.
@@ -203,30 +228,16 @@ namespace RewindDuel
             fx.SyncSmokes(centers, left, SmokeRadius);
             fx.SyncFlashes(new List<Vector3>(), new List<bool>());
 
-            // Third person: behind and above the followed player, looking where they look.
             double fx0 = fr[1 + rpFollow * 5], fy0 = fr[2 + rpFollow * 5], faim = fr[3 + rpFollow * 5];
-            var target = W(fx0, fy0, 0);
-            float yawDeg = YawFromAim(faim) + rpOrbit;
-            var rot = Quaternion.Euler(0, yawDeg, 0);
-            var want = target + rot * new Vector3(0.9f, 2.7f * rpZoom, -4.6f * rpZoom);
-            // Keep the camera on the player's side of any wall behind them, so it never sits inside one.
-            float pulled = 0f; // 0 when the camera sits where it wants to, towards 1 as a wall pulls it in
-            var flat = new Vector2(want.x - target.x, -(want.z - target.z));
-            float len = flat.magnitude;
-            if (len > 0.01f)
+            switch (rpCamMode)
             {
-                float hit = WallHit((float)fx0, (float)fy0, flat / len, len);
-                if (hit < len)
-                {
-                    float keep = Mathf.Max(0.35f, hit - 0.35f) / len;
-                    pulled = 1f - keep;
-                    // Pulled in close, it rises, so it looks over the shoulder instead of into the player's back.
-                    want = new Vector3(target.x + (want.x - target.x) * keep, want.y + pulled * 0.7f, target.z + (want.z - target.z) * keep);
-                }
+                case 1: PovCamera(fx0, fy0, faim); break;
+                case 2: FreeCamera(kb, mouse); break;
+                case 3: OverheadCamera(); break;
+                default: ThirdPersonCamera(fx0, fy0, faim); break;
             }
-            rpCam = rpCam == Vector3.zero || (rpCam - want).sqrMagnitude > 100 ? want : Vector3.Lerp(rpCam, want, Chase(0.12f));
-            var look = target + Vector3.up * 1.2f + rot * Vector3.forward * (2.5f + pulled * 4f);
-            cam.transform.SetPositionAndRotation(rpCam, Quaternion.LookRotation(look - rpCam));
+            // In POV the camera is inside the watched player's body, so it is hidden.
+            if (rpCamMode == 1 && rpBots[rpFollow]) rpBots[rpFollow].gameObject.SetActive(false);
         }
 
         /// Distance along a ray (map units) to the first wall it enters, or `max` if none: the slab test per rectangle.
@@ -252,6 +263,98 @@ namespace RewindDuel
             t0 = Mathf.Max(t0, a);
             t1 = Mathf.Min(t1, b);
             return t0 <= t1;
+        }
+
+        // ================================================================ cameras
+
+        static readonly string[] CamNames = { "THIRD PERSON", "POV", "FREE", "OVERHEAD" };
+        int rpCamMode;
+        Vector3 freePos;
+        float freeYaw, freePitch = 20f;
+
+        void CycleCamera()
+        {
+            rpCamMode = (rpCamMode + 1) % CamNames.Length;
+            // The free camera starts wherever the camera is now, so switching never jumps the view.
+            if (rpCamMode == 2)
+            {
+                freePos = cam.transform.position;
+                var e = cam.transform.rotation.eulerAngles;
+                freeYaw = e.y;
+                freePitch = e.x > 180 ? e.x - 360 : e.x;
+            }
+            rpCam = Vector3.zero;
+        }
+
+        /// Behind and above the followed player, looking where they look, kept out of walls.
+        void ThirdPersonCamera(double fx0, double fy0, double faim)
+        {
+        var target = W(fx0, fy0, 0);
+        float yawDeg = YawFromAim(faim) + rpOrbit;
+        var rot = Quaternion.Euler(0, yawDeg, 0);
+        var want = target + rot * new Vector3(0.9f, 2.7f * rpZoom, -4.6f * rpZoom);
+        // Keep the camera on the player's side of any wall behind them, so it never sits inside one.
+        float pulled = 0f; // 0 when the camera sits where it wants to, towards 1 as a wall pulls it in
+        var flat = new Vector2(want.x - target.x, -(want.z - target.z));
+        float len = flat.magnitude;
+        if (len > 0.01f)
+        {
+            float hit = WallHit((float)fx0, (float)fy0, flat / len, len);
+            if (hit < len)
+            {
+                float keep = Mathf.Max(0.35f, hit - 0.35f) / len;
+                pulled = 1f - keep;
+                // Pulled in close, it rises, so it looks over the shoulder instead of into the player's back.
+                want = new Vector3(target.x + (want.x - target.x) * keep, want.y + pulled * 0.7f, target.z + (want.z - target.z) * keep);
+            }
+        }
+        rpCam = rpCam == Vector3.zero || (rpCam - want).sqrMagnitude > 100 ? want : Vector3.Lerp(rpCam, want, Chase(0.12f));
+        var look = target + Vector3.up * 1.2f + rot * Vector3.forward * (2.5f + pulled * 4f);
+        cam.transform.SetPositionAndRotation(rpCam, Quaternion.LookRotation(look - rpCam));
+        }
+
+        /// Their eyes and their aim: exactly what that player was looking at, cone and all.
+        void PovCamera(double x, double y, double aim)
+        {
+            var eye = W(x, y, eyeHeight);
+            cam.transform.SetPositionAndRotation(eye, Quaternion.Euler(0, YawFromAim(aim), 0));
+        }
+
+        /// Fly anywhere: WASD to move, Q and E for down and up, Shift for speed, right-drag to look.
+        void FreeCamera(Keyboard kb, Mouse mouse)
+        {
+            if (mouse != null && mouse.rightButton.isPressed)
+            {
+                var d = mouse.delta.ReadValue() * 0.15f;
+                freeYaw += d.x;
+                freePitch = Mathf.Clamp(freePitch - d.y, -85f, 85f);
+            }
+            var rot = Quaternion.Euler(freePitch, freeYaw, 0);
+            if (kb != null)
+            {
+                var move = Vector3.zero;
+                if (kb.wKey.isPressed) move += rot * Vector3.forward;
+                if (kb.sKey.isPressed) move -= rot * Vector3.forward;
+                if (kb.dKey.isPressed) move += rot * Vector3.right;
+                if (kb.aKey.isPressed) move -= rot * Vector3.right;
+                if (kb.eKey.isPressed) move += Vector3.up;
+                if (kb.qKey.isPressed) move -= Vector3.up;
+                float speed = kb.shiftKey.isPressed ? 22f : 8f;
+                freePos += move * speed * Time.unscaledDeltaTime;
+                freePos.y = Mathf.Clamp(freePos.y, 0.4f, 60f);
+            }
+            cam.transform.SetPositionAndRotation(freePos, rot);
+        }
+
+        /// The whole map from above, north up, for reading positions and rotations.
+        void OverheadCamera()
+        {
+            if (map == null) return;
+            float span = (float)System.Math.Max(map.width, map.height);
+            var center = W(map.width / 2, map.height / 2, 0);
+            var want = center + new Vector3(0, span * 0.95f, -span * 0.12f);
+            rpCam = rpCam == Vector3.zero ? want : Vector3.Lerp(rpCam, want, Chase(0.2f));
+            cam.transform.SetPositionAndRotation(rpCam, Quaternion.LookRotation(center - rpCam, Vector3.forward));
         }
 
         void ReplayEvent(object e)
@@ -514,6 +617,8 @@ namespace RewindDuel
             cx += 88 * S;
             if (Chip(new Rect(cx, cy, 230 * S, 36 * S), "WATCHING " + rpNames[me].ToUpperInvariant() + " · TAB", false, Gfx.Ally)) { rpFollow = 1 - rpFollow; ColourReplayBots(); }
             cx += 238 * S;
+            if (Chip(new Rect(cx, cy, 190 * S, 36 * S), CamNames[rpCamMode] + " · V", false, Gfx.Label)) CycleCamera();
+            cx += 198 * S;
             if (Chip(new Rect(cx, cy, 110 * S, 36 * S), "LOBBY", false, Gfx.Label)) { LeaveReplay(); return; }
 
             var go = new Rect(px + pw - 340 * S, cy - 6 * S, 320 * S, 46 * S);
@@ -525,7 +630,7 @@ namespace RewindDuel
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
                 "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · right-drag orbit · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
         }
