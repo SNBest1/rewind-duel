@@ -231,7 +231,7 @@ Before it has seen you, the AI says where you are going (`CALL calling it: you a
 
 ### Fight yourself
 
-**vs yourself** in the lobby: your opponent is the k-nearest-neighbour clone of you, built from every decision you have recorded under your name, carrying your favourite guns. Play a match or two first.
+**vs yourself** in the lobby: your opponent is you, recreated as the person + AI hybrid (see step 6 of the rewind below): your recorded habits out of fights, the AI's fighting at your own rank, carrying your favourite guns. Play a match or two first.
 
 ### AI coach
 
@@ -260,12 +260,14 @@ In the replay viewer, pick a moment and press **What could I have done?** The se
 3. Click a round chip (it jumps to 5 s before that round's first kill), or drag the timeline, or click the strip.
 4. Press **Rewind from here**. You control your slot from that exact tick.
 5. Your opponent is a **ghost** at first: it presses exactly what they pressed. As soon as you change the fight
-   (divergence score over 2.5, from both positions, both HP values and whether they can see you), a **clone** of
+   (divergence score over 2.5, from both positions, both HP values and whether they can see you), a recreation of
    that real player takes over and the trace says `HANDOFF` with the number.
-6. The clone is k-nearest-neighbours (k = 7) over every recorded decision that player made in every match in `data/`.
-   Each `COPY` line in the trace panel (T) cites the match and tick it copied: click it to watch that moment.
-   If the situation is new to the clone (nearest recorded moment past the 95th percentile of held-out distances),
-   the circuit breaker hands it to the basic bot and says `BREAKER`.
+6. The recreation is the person and the AI together (`server/persona.ts`, DECISIONS D75). A k-nearest-neighbours
+   clone (k = 7) over every recorded decision that player made in `data/` decides where they go, how they move,
+   where they look and when they use utility, whenever enough of their similar moments agree. In a fight the live AI
+   aims, shoots and moves at that player's own rank, using its belief map and what it learned about you. Where they
+   never showed the situation (nearest recorded moment past the 95th percentile of held-out distances), the AI plays
+   it alone at their rank. The trace panel (T) says which half decides with `MIX` lines.
 7. When the round ends you see the result and how many attempts from that moment you have won. **Try again** makes
    a new branch from the same tick. Branches are stored in `data/branches/<match>.json` and replay exactly.
 
@@ -286,6 +288,13 @@ Writes `eval/results-live.md` from what is in `data/`:
 3. Adaptation: the adaptive AI's skill round by round, and your round win rate early vs late.
 
 Needs 2+ matches under the same name for part 1.
+
+```bash
+npm run eval:persona
+```
+
+Writes `eval/results-persona.md`: for each player, how often the plain clone, the person + AI hybrid and the AI alone
+move like the real person on a held-out match, and how many rounds each wins against the AI at that player's rank.
 
 ## Environment
 

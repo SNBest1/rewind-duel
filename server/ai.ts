@@ -430,6 +430,12 @@ export class AiPlayer {
     return stepToward(this.grid, this.field(to), o.self.x, o.self.y);
   }
 
+  /** Puts the AI's aim where the body really looks. The persona (server/persona.ts) steers the aim itself out of
+   *  fights; without this the AI would turn from where it last aimed, not from where the player faces. */
+  syncAim(aim: number): void {
+    this.aim = aim;
+  }
+
   think(o: Observation): Input {
     const input: Input = { ...IDLE, move: { x: 0, y: 0 }, aim: this.aim };
     if (o.round !== this.round) {

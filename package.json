@@ -26,6 +26,7 @@
     "export:unity": "tsx scripts/export-unity.ts",
     "check:determinism": "node scripts/check-determinism.mjs",
     "eval:live-clones": "tsx eval/clone-eval.ts",
+    "eval:persona": "tsx eval/persona-eval.ts 6",
     "demo:data": "tsx scripts/demo-data.ts",
     "eval:belief": "tsx eval/belief-ablation.ts 4",
     "eval:ranks": "tsx eval/rank-ladder.ts 1",

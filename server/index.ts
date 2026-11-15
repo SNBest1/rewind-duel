@@ -10,12 +10,13 @@ import {
   type Input, type MatchFile, type Slot,
 } from '@rewind/engine';
 // This branch's live AI, clones, rewind and coach (ai/).
-import { GuardedClone, buildClone, loadMatches } from '../ai/clone/knn';
+import { buildClone, loadMatches } from '../ai/clone/knn';
+import { AiAlonePolicy, PersonaPolicy, personSkill } from './persona';
 import type { Policy, TraceLine } from '../ai/clone/policy';
 import { forkState, RewindDriver, type BranchFile } from '../ai/rewind/session';
 import { coachMoments } from '../ai/rewind/coach';
 import { analyzeMatch, type MatchSummary } from '../ai/rewind/summary';
-import { AiPlayer, BasicBot, DIFFICULTIES, parseDifficulty, type Difficulty } from './ai';
+import { AiPlayer, DIFFICULTIES, parseDifficulty, type Difficulty } from './ai';
 import { ALL_RANKS, rankOf } from './ranks';
 import { BrainStore, Trainer, summarize } from './brain';
 import { MatchRunner, sanitizeInput } from './match';
@@ -43,7 +44,8 @@ type Rewind = {
   forkTick: number;
   human: Slot;
   driver: RewindDriver;
-  guarded: GuardedClone | null;
+  /** The opponent's policy after the handoff, for its breaker stats (ticks the clone had no data). */
+  guarded: { ticks: number; ticksOnBreaker: number } | null;
   opponent: string;
 };
 
@@ -55,7 +57,7 @@ type Room = {
   votes: string[];
   ai?: { difficulty: Difficulty; bot?: AiPlayer };
   /** Mirror mode: slot 1 is a clone of the human in slot 0, built from their own recordings. */
-  mirror?: { built: ReturnType<typeof buildClone>; policy?: GuardedClone; samples: number; matches: number; buy: number[]; bought: number };
+  mirror?: { built: ReturnType<typeof buildClone>; policy?: PersonaPolicy; samples: number; matches: number; buy: number[]; bought: number };
   rewind?: Rewind;
   trainers: Trainer[];
   /** Behaviour trace lines waiting to go out with the next observation. */
@@ -162,9 +164,11 @@ function startMatch(room: Room): void {
   }
 
   if (room.mirror) {
-    // Built now that the map is known: the clone's fallback bot needs the map's navigation grid.
+    // Built now that the map is known: the AI half needs the map's navigation grid. You against yourself: your
+    // habits, at your rank, with what the AI has learned about you (D75).
     const m = room.mirror;
-    m.policy = new GuardedClone(m.built.clone.fresh(), new BasicBot(1, mapId), m.built.limit, (t) => room.trace.push(t));
+    const you = room.trainers[0].brain;
+    m.policy = new PersonaPolicy(m.built.clone.fresh(), m.built.limit, personSkill(you), 1, mapId, you, Math.random, (t) => room.trace.push(t));
   }
 
   room.sockets.forEach((ws, slot) => send(ws, {
@@ -261,19 +265,21 @@ function startRewind(ws: WebSocket, file: MatchFile, forkTick: number, human: Sl
   // The clone of the opponent. Built from every recorded match they played, this one included.
   const built = buildClone(opponent, loadMatches(DATA_DIR));
   const useClone = built.trainSamples >= MIN_CLONE_SAMPLES;
-  let guarded: GuardedClone | null = null;
+  // After the handoff the opponent is the person and the AI together (server/persona.ts, D75): the person's habits
+  // where their recordings cover the moment, the AI's fighting at their own rank, and what the AI knows about you.
+  const skill = personSkill(brains.load(opponent));
+  const knowsYou = brains.load(name);
   const makePolicy = (): Policy => {
-    const fallback = new BasicBot(opp, file.map);
-    if (!useClone) return fallback;
-    guarded = new GuardedClone(built.clone.fresh(), fallback, built.limit, (t) => room.trace.push(t));
-    rewind.guarded = guarded;
-    return guarded;
+    if (!useClone) return new AiAlonePolicy(opp, file.map, skill, knowsYou, (t) => room.trace.push(t));
+    const persona = new PersonaPolicy(built.clone.fresh(), built.limit, skill, opp, file.map, knowsYou, Math.random, (t) => room.trace.push(t));
+    rewind.guarded = persona;
+    return persona;
   };
   const driver = new RewindDriver(file, forkTick, human, makePolicy, (t) => room.trace.push(t));
-  const rewind: Rewind = { file, forkTick, human, driver, guarded, opponent };
+  const rewind: Rewind = { file, forkTick, human, driver, guarded: null, opponent };
   room.rewind = rewind;
   if (!useClone) {
-    room.trace.push({ tick: forkTick, actor: 'BOT', type: 'NOTE', reason: `only ${built.trainSamples} recorded decisions of ${opponent}: the basic bot will stand in after the handoff` });
+    room.trace.push({ tick: forkTick, actor: 'BOT', type: 'NOTE', reason: `only ${built.trainSamples} recorded decisions of ${opponent}: the AI will play them at their rank after the handoff` });
   }
 
   const branchNo = loadBranches(file.id).length + 1;
@@ -318,7 +324,7 @@ function finishRewind(room: Room, outcome: 'won' | 'lost' | 'abandoned', reason:
   rooms.delete(room.code);
   const branches = loadBranches(rw.file.id);
   if (outcome !== 'abandoned') {
-    const g = rw.guarded as GuardedClone | null;
+    const g = rw.guarded;
     const branch: BranchFile = {
       match: rw.file.id, forkTick: rw.forkTick, human: rw.human, opponent: rw.opponent,
       inputs: runner.inputLog, ticks: runner.state.tick, finalHash: hashState(runner.state),
@@ -333,7 +339,7 @@ function finishRewind(room: Room, outcome: 'won' | 'lost' | 'abandoned', reason:
     brains.save(t.brain);
   }
   const fromHere = branches.filter((b) => b.forkTick === rw.forkTick && b.human === rw.human);
-  const g = rw.guarded as GuardedClone | null;
+  const g = rw.guarded;
   console.log(`[${room.code}] rewind ${outcome} (${reason}), handoff at ${rw.driver.handoffTick ?? 'never'}`);
   const ws = room.sockets[rw.human];
   send(ws, {
