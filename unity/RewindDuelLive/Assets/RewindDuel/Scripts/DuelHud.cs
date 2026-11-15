@@ -923,15 +923,32 @@ namespace RewindDuel
             Fill(new Rect(0, 0, w, h), new Color(0.01f, 0.01f, 0.03f, 0.78f));
             int winner = obs != null && !Json.IsNull(obs, "winner") ? (int)Json.Num(obs, "winner") : -1;
             bool won = winner == slot;
-            string title = endWhy == "disconnect" ? "ENDED" : endWhy == "rewind" ? "BRANCH OVER" : won ? "VICTORY" : "DEFEAT";
+            // A rewind ends with its round: say whether the player changed what happened.
+            bool rewound = endWhy == "rewind" && endRewind != null;
+            if (rewound) won = Json.Str(endRewind, "outcome") == "won";
+            string orig = Json.Str(rewindInfo, "originalOutcome");
+            string title = endWhy == "disconnect" ? "ENDED"
+                : rewound ? (won ? (orig == "lost" ? "YOU CHANGED IT" : "ROUND WON") : (orig == "lost" ? "SAME RESULT" : "ROUND LOST"))
+                : won ? "VICTORY" : "DEFEAT";
             Color tc = endWhy == "disconnect" ? Gfx.Label : won ? Gfx.Ally : Gfx.Rec;
             float pw = Mathf.Min(900 * S, w - 60 * S);
             var r = new Rect(w / 2 - pw / 2, h * 0.08f, pw, h * 0.84f);
             Glow(new Rect(r.x - 100 * S, r.y - 80 * S, r.width + 200 * S, 360 * S), new Color(tc.r, tc.g, tc.b, 0.25f));
             Text(new Rect(r.x, r.y, r.width, 110 * S), title, St(96, true, TextAnchor.MiddleCenter, true), tc);
             var score = obs != null ? Json.Arr(obs, "score") : null;
-            if (score != null) Text(new Rect(r.x, r.y + 104 * S, r.width, 40 * S), ((double)score[slot]).ToString("0") + "  –  " + ((double)score[1 - slot]).ToString("0") + "     vs " + NameOf(1 - slot), St(24, true, TextAnchor.MiddleCenter, true), Gfx.Label);
-            Text(new Rect(r.x, r.y + 144 * S, r.width, 20 * S), (endWhy == "disconnect" ? "A player left. " : "") + "Saved as data/" + endMatchId + ".json — rewind any round from the lobby.", St(12, false, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.55f), false);
+            if (rewound)
+            {
+                int tries = (int)Json.Num(endRewind, "attempts"), wins = (int)Json.Num(endRewind, "wins");
+                string hand = Json.IsNull(endRewind, "ghostSeconds") ? "the opponent stayed a ghost the whole round"
+                    : NameOf(1 - slot) + " was a ghost for " + Json.Num(endRewind, "ghostSeconds").ToString("0.0", CultureInfo.InvariantCulture) + " s, then their habits + the AI took over";
+                Text(new Rect(r.x, r.y + 104 * S, r.width, 40 * S),
+                    (orig != null ? "Originally " + orig + "  ·  " : "") + "won " + wins + " of " + tries + " attempts from this moment",
+                    St(22, true, TextAnchor.MiddleCenter, true), Gfx.Label);
+                Text(new Rect(r.x, r.y + 144 * S, r.width, 20 * S), hand + ". Every attempt is saved: watch it from the replay.", St(12, false, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.65f), false);
+                score = null;
+            }
+            else if (score != null) Text(new Rect(r.x, r.y + 104 * S, r.width, 40 * S), ((double)score[slot]).ToString("0") + "  –  " + ((double)score[1 - slot]).ToString("0") + "     vs " + NameOf(1 - slot), St(24, true, TextAnchor.MiddleCenter, true), Gfx.Label);
+            if (!rewound) Text(new Rect(r.x, r.y + 144 * S, r.width, 20 * S), (endWhy == "disconnect" ? "A player left. " : "") + "Saved as data/" + endMatchId + ".json — rewind any round from the lobby.", St(12, false, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.55f), false);
 
             float y = r.y + 184 * S;
             var insights = Json.Arr(endBrain, "insights");

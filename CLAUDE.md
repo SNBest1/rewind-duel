@@ -62,6 +62,7 @@ Merged from a branch built in parallel with Phases 2 to 6. It does not replace m
 - `server/index.ts` serves both: main's `/api/matches`, `/api/replay`, `/api/roster`, `/api/presets` and its `rewind`/`rwinput`/`retry`/`whatif` socket messages; this branch's `/api/viewer/*`, `/api/whatif`, `/api/coach/*`, `/api/version` and `join` modes `ai`, `mirror`, `rewind`. `/api/catalog` and the `mapData` field of `start` exist for the Unity client (D70): keep them in step with any change to maps or weapons. The Unity client lives in `unity/RewindDuelLive` (its WebGL build in `Build/WebGL` is served at `/play/`, D71). Replays there read `/api/viewer/matches/:id` and take control with a `join` in mode `rewind`.
 - Every replay of a recorded match must create it with `file.rules` (`createMatch(seed, map, file.rules ?? 'classic')`), or economy-rules matches rebuild differently (D72; `ai/rewind/test/rules.test.ts`).
 - `eval/belief-ablation.ts`, `rank-ladder.ts`, `reads.ts`, `clone-eval.ts` — this branch's evidence (`npm run eval:belief`, `eval:ranks`, `eval:reads`, `eval:live-clones`).
+- `unity/RewindDuelLive/.../DuelDemo.cs` (editor-only) records the demo video's footage; `scripts/demo-video.py` cuts it. See README "Record the demo video".
 - `web/view3d.ts` — first-person three.js view inside the live game, loaded on V.
 
 ## Non-obvious things

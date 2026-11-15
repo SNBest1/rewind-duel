@@ -61,6 +61,7 @@ namespace RewindDuel
         Dictionary<string, object> obs;
         readonly Predictor predictor = new Predictor();
         string endMatchId, endWhy;
+        object endRewind; // the server's verdict on a rewind attempt: outcome, attempts and wins from this moment, handoff
         object endBrain;
         int coachCount;
         object coachData;
@@ -440,6 +441,7 @@ namespace RewindDuel
                     case "end":
                         endMatchId = Json.Str(msg, "matchId");
                         endWhy = Json.Str(msg, "why");
+                        endRewind = Json.Obj(msg, "rewind");
                         endBrain = Json.Obj(msg, "brain");
                         coachCount = (int)Json.Num(msg, "coach");
                         coachData = null;
@@ -840,6 +842,9 @@ namespace RewindDuel
             };
             pressedDash = pressedSmoke = pressedReload = pressedFlash = false;
             pendingBuy = pendingEquip = -1;
+#if UNITY_EDITOR
+            if (demoDrive != null) input = demoDrive(input); // the demo recorder's scripted player (DuelDemo.cs)
+#endif
             return input;
         }
 

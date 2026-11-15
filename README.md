@@ -147,6 +147,22 @@ Its **Replays** tab plays any recorded match back in 3D from behind either playe
 
 There is also a **Unity 3D viewer** of recorded matches under `unity/RewindDuel3D` (scaffolded from the `unity` CLI). Like the three.js view it is a renderer of exported snapshots, not a second engine. Build its data with `npm run export:unity`, then see `unity/README.md` to generate the scene and run it.
 
+## Record the demo video
+
+The video is cut from real footage of the Unity client, recorded in the Editor by `DuelDemo.cs` (editor-only, not in builds):
+
+1. `npm run server`, open `unity/RewindDuelLive` in Unity 6, enter Play mode.
+2. Run `DemoRun(<frames dir>, <match id>, null)` on the `DuelClient` (from a script, for example the Unity CLI's
+   `script eval`). It plays a scripted tour of the replay (cameras, What They Saw, the coach, taking control
+   of a lost round until an attempt wins, the attempt on the timeline) and saves every frame with its real time.
+   In the take-control scene the player is scripted: it walks the player's recorded path and aims at the rival
+   once he is in sight. The opponent is the real server-side ghost and person + AI.
+3. `uv run --with pillow python scripts/demo-video.py <frames dir> media/rewind-duel-demo.mp4` cuts it, adds
+   titles and a voiceover (macOS `say`, Ava Premium) and writes the video. Needs ffmpeg.
+
+The take-control scene stores a rewind attempt in `data/branches/`; delete it afterwards if you do not want a
+scripted attempt among real ones.
+
 ## Run the evals
 
 ```bash

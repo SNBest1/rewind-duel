@@ -7,3 +7,6 @@ dist/
 # Recorded matches (data/*.json) are committed: main's evals are built on them.
 data/brains/
 data/branches/
+
+# Rendered demo videos (scripts/demo-video.py): large, rebuilt from a recording.
+media/
