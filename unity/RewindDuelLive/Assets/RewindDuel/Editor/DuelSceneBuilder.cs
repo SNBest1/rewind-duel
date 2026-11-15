@@ -96,5 +96,18 @@ namespace RewindDuel.Editor
             Debug.Log("DuelSceneBuilder: wrote " + ScenePath + " and made it the only scene in Build Settings.");
             if (Application.isBatchMode) EditorApplication.Exit(0);
         }
+
+        /// Builds the WebGL client into Build/WebGL (what the server serves at /play/), with the scenes and player
+        /// settings the project already has. For rebuilding without opening the Editor:
+        /// Unity -batchmode -nographics -projectPath unity/RewindDuelLive -executeMethod RewindDuel.Editor.DuelSceneBuilder.BuildWebGL
+        [MenuItem("Rewind Duel/Build WebGL")]
+        public static void BuildWebGL()
+        {
+            var scenes = System.Array.ConvertAll(EditorBuildSettings.scenes, s => s.path);
+            var report = UnityEditor.BuildPipeline.BuildPlayer(scenes, "Build/WebGL", BuildTarget.WebGL, BuildOptions.None);
+            var ok = report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded;
+            Debug.Log("DuelSceneBuilder: WebGL build " + report.summary.result + ", " + report.summary.totalSize + " bytes");
+            if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
+        }
     }
 }

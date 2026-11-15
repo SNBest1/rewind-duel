@@ -148,7 +148,9 @@ Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timel
 
 There is also a **first-person 3D client** for the live game, in `unity/RewindDuelLive` (Unity 6000.6.9f1). It plays every mode against this server and reads maps and weapons from `GET /api/catalog` (DECISIONS D70). Open `Assets/RewindDuel/RewindDuel.unity` and press Play, or build it for the browser:
 
-1. In Unity, build the WebGL target to `unity/RewindDuelLive/Build/WebGL` (git-ignored).
+1. In Unity, build the WebGL target to `unity/RewindDuelLive/Build/WebGL` (git-ignored). From the Editor, use **Rewind Duel > Build WebGL**. Without opening it:
+   `<Unity> -batchmode -nographics -projectPath unity/RewindDuelLive -buildTarget WebGL -executeMethod RewindDuel.Editor.DuelSceneBuilder.BuildWebGL`
+   (`<Unity>` is the editor binary, on macOS `/Applications/Unity/Hub/Editor/6000.6.9f1/Unity.app/Contents/MacOS/Unity`; takes a few minutes).
 2. Restart `npm run server`. It serves the 3D game at `/play/`, sends `/` there, and keeps the 2D client at `/classic` (DECISIONS D71).
 
 With the WebGL build in place, anyone who opens your tunnel link plays the same 3D game you do.
