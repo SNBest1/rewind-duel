@@ -179,6 +179,7 @@ namespace RewindDuel
                 if (kb.tabKey.wasPressedThisFrame) { rpFollow = 1 - rpFollow; ColourReplayBots(); }
                 if (kb.vKey.wasPressedThisFrame) CycleCamera();
                 if (kb.mKey.wasPressedThisFrame) rpTacMap = !rpTacMap;
+                if (kb.fKey.wasPressedThisFrame) rpFog = !rpFog;
                 if (kb.leftBracketKey.wasPressedThisFrame) JumpRound(-1);
                 if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
@@ -217,6 +218,14 @@ namespace RewindDuel
                 bool showRing = alive && rpCamMode == 3;
                 if (ring.gameObject.activeSelf != showRing) ring.gameObject.SetActive(showRing);
                 if (showRing) ring.SetPositionAndRotation(W(x, y, 0.06f), Quaternion.Euler(90, 0, 0));
+            }
+
+            // Fog: the rival's body is gone while the followed player could not see them.
+            if (RivalHidden(fr))
+            {
+                int o = 1 - rpFollow;
+                if (rpBots[o].gameObject.activeSelf) rpBots[o].gameObject.SetActive(false);
+                if (rpRings[o].gameObject.activeSelf) rpRings[o].gameObject.SetActive(false);
             }
 
             // Smokes alive at this frame.
@@ -370,6 +379,8 @@ namespace RewindDuel
                     var from = W(Json.Num(e, "x"), Json.Num(e, "y"), 1.35f);
                     var to = W(Json.Num(e, "toX"), Json.Num(e, "toY"), 1.3f);
                     bool hit = Json.Bool(e, "hit"), head = Json.Bool(e, "head");
+                    // Under fog, a rival's miss is unseen unless the rival was in sight (engine visibleEvents).
+                    if (who != rpFollow && !hit && RivalHidden(FrameAt(rpTick))) break;
                     fx.Tracer(from, to, Bullet, 0.014f);
                     fx.Muzzle(from, Bullet);
                     if (hit) fx.Sparks(to, head ? Gfx.Gold : Gfx.Rec, 10, 4f);
@@ -607,7 +618,7 @@ namespace RewindDuel
             Text(new Rect(bx + 74 * S, by + 4 * S, 200 * S, 24 * S), rpNames[me].ToUpperInvariant(), St(14, true, TextAnchor.MiddleLeft, true), Gfx.Label);
             Text(new Rect(bx + 74 * S, by + 26 * S, 200 * S, 20 * S), "HP " + (int)fr[4 + me * 5], St(11, true, TextAnchor.MiddleLeft), fr[4 + me * 5] > 0 ? Gfx.Ally : Gfx.Rec);
             Text(new Rect(bx + bw - 274 * S, by + 4 * S, 200 * S, 24 * S), rpNames[them].ToUpperInvariant(), St(14, true, TextAnchor.MiddleRight, true), Gfx.Label);
-            Text(new Rect(bx + bw - 274 * S, by + 26 * S, 200 * S, 20 * S), "HP " + (int)fr[4 + them * 5], St(11, true, TextAnchor.MiddleRight), fr[4 + them * 5] > 0 ? Gfx.Enemy : Gfx.Rec);
+            Text(new Rect(bx + bw - 274 * S, by + 26 * S, 200 * S, 20 * S), RivalHidden(fr) ? "HP ?" : "HP " + (int)fr[4 + them * 5], St(11, true, TextAnchor.MiddleRight), fr[4 + them * 5] > 0 ? Gfx.Enemy : Gfx.Rec);
             Text(new Rect(bx + bw - 80 * S, by, 70 * S, 54 * S), sc[them].ToString(), St(40, true, TextAnchor.MiddleCenter, true), Gfx.Enemy);
             Text(new Rect(w / 2 - 80 * S, by + 4 * S, 160 * S, 26 * S), "REPLAY", St(20, true, TextAnchor.MiddleCenter, true), Gfx.Label);
             Text(new Rect(w / 2 - 120 * S, by + 28 * S, 240 * S, 20 * S), mapName.ToUpperInvariant() + " · ROUND " + (ri + 1), St(11, true, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.6f));
@@ -616,6 +627,14 @@ namespace RewindDuel
 
             DrawRoundList(w, h);
             DrawTacMap(w, h);
+            if (rpFog)
+            {
+                bool seen = !RivalHidden(fr);
+                var fl = new Rect(w / 2 - 170 * S, by + 64 * S, 340 * S, 26 * S);
+                Panel(fl, new Color(0.04f, 0.045f, 0.06f, 0.86f));
+                Text(fl, "WHAT " + rpNames[me].ToUpperInvariant() + " SAW  ·  " + (seen ? rpNames[them] + " IN SIGHT" : rpNames[them] + " HIDDEN") + "  ·  F",
+                    St(11, true, TextAnchor.MiddleCenter, true), seen ? Gfx.Enemy : new Color(1, 1, 1, 0.6f), false);
+            }
 
             // Bottom: the timeline of the whole match, then the controls.
             float pw = Mathf.Min(1180 * S, w - 40 * S), px = w / 2 - pw / 2, ph = 150 * S, py = h - ph - 18 * S;
@@ -678,7 +697,7 @@ namespace RewindDuel
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
                 "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · F what they saw · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
         }

@@ -53,6 +53,8 @@ namespace RewindDuel
             }
 
             var fr = FrameAt(rpTick);
+            bool rivalHidden = RivalHidden(fr);
+            Text(new Rect(r.x, r.y - 26 * S, r.width, 20 * S), rpFog ? "FOG ON · F" : "FOG OFF · F", St(10, true, TextAnchor.MiddleRight, true), rpFog ? Gfx.Ally : new Color(1, 1, 1, 0.45f), false);
             if (Event.current.type == EventType.Repaint)
             {
                 // Clip GL to the map: everything below is drawn in screen pixels.
@@ -64,7 +66,7 @@ namespace RewindDuel
 
                 for (int s = 0; s < 2; s++)
                 {
-                    if (fr[4 + s * 5] <= 0) continue;
+                    if (fr[4 + s * 5] <= 0 || (s != rpFollow && rivalHidden)) continue;
                     var col = s == rpFollow ? Gfx.Ally : Gfx.Enemy;
                     var p = M(fr[1 + s * 5], fr[2 + s * 5]);
                     double aim = fr[3 + s * 5];
@@ -109,6 +111,7 @@ namespace RewindDuel
                     if (et > rpTick) break;
                     if (et < rpTick - ShotTicks || Json.Str(e, "type") != "shot") continue;
                     int who = (int)Json.Num(e, "slot");
+                    if (who != rpFollow && rivalHidden && !Json.Bool(e, "hit")) continue;
                     var col = who == rpFollow ? Gfx.Ally : Gfx.Enemy;
                     float fade = 1f - (float)(rpTick - et) / ShotTicks;
                     Seg(M(Json.Num(e, "x"), Json.Num(e, "y")), M(Json.Num(e, "toX"), Json.Num(e, "toY")), 1.2f * S,
@@ -151,9 +154,17 @@ namespace RewindDuel
             }
 
             // Players on top: a dot in their colour and a short aim tick; the name of the one you watch.
+            // Under fog a hidden rival is a faded mark where they were last seen, with how long ago.
+            if (rivalHidden && fr[4 + (1 - rpFollow) * 5] > 0 && LastSeen(out var ls, out var ago))
+            {
+                var q = M(ls.x, ls.y);
+                float d = 9 * S;
+                Fill(new Rect(q.x - d / 2, q.y - d / 2, d, d), new Color(Gfx.Enemy.r, Gfx.Enemy.g, Gfx.Enemy.b, 0.35f));
+                Text(new Rect(q.x - 60 * S, q.y + 6 * S, 120 * S, 16 * S), (ago / TickRate).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s ago", St(10, true, TextAnchor.UpperCenter), new Color(Gfx.Enemy.r, Gfx.Enemy.g, Gfx.Enemy.b, 0.6f));
+            }
             for (int s = 0; s < 2; s++)
             {
-                if (fr[4 + s * 5] <= 0) continue;
+                if (fr[4 + s * 5] <= 0 || (s != rpFollow && rivalHidden)) continue;
                 var col = s == rpFollow ? Gfx.Ally : Gfx.Enemy;
                 var p = M(fr[1 + s * 5], fr[2 + s * 5]);
                 float d = 9 * S;
