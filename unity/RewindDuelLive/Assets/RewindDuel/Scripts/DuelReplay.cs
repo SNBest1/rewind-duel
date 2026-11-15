@@ -459,7 +459,9 @@ namespace RewindDuel
             int curKills = 0;
             foreach (var k in kills) if (KillRound(k) == cur) curKills++;
             float rowH = 34 * S, killH = 26 * S;
-            float ph = Mathf.Min(bottom - y, 34 * S + rpRounds.Count * (rowH + 3 * S) + curKills * killH + 8 * S);
+            float statH = 22 * S;
+            var stats = RoundStats();
+            float ph = Mathf.Min(bottom - y, 34 * S + rpRounds.Count * (rowH + 3 * S) + curKills * killH + 2 * statH + 12 * S);
             var panel = new Rect(x, y, pw, ph);
             Panel(panel, new Color(0.04f, 0.045f, 0.06f, 0.84f));
             Text(new Rect(x + 14 * S, y + 8 * S, pw, 18 * S), "ROUNDS", St(12, true, TextAnchor.UpperLeft, true), Gfx.Label, false);
@@ -485,6 +487,20 @@ namespace RewindDuel
                 ry += rowH + 3 * S;
 
                 if (i != cur) continue;
+                // The round in numbers, for both players: the round's whole total, not just up to now.
+                for (int n = 0; n < 2 && ry + statH <= panel.yMax; n++)
+                {
+                    int sl = n == 0 ? me : 1 - me;
+                    var st = stats[i, sl];
+                    var sr = new Rect(x + 24 * S, ry, pw - 40 * S, statH);
+                    Color sc = sl == me ? Gfx.Ally : Gfx.Enemy;
+                    Text(new Rect(sr.x + 4 * S, sr.y, 90 * S, sr.height), rpNames[sl], St(11, true, TextAnchor.MiddleLeft), sc, false);
+                    string acc = st.shots > 0 ? Mathf.RoundToInt(100f * st.hits / st.shots) + "%" : "–";
+                    string line = st.shots + " shots · " + st.hits + " hit " + acc + " · " + st.heads + " head" + (st.damage >= 0 ? " · " + st.damage + " dmg" : "");
+                    Text(new Rect(sr.x + 90 * S, sr.y, sr.width - 90 * S, sr.height), line, St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.75f), false);
+                    ry += statH;
+                }
+                ry += 4 * S;
                 // The watched round's kills, each a jump to just before it happened.
                 foreach (var k in kills)
                 {
@@ -506,6 +522,34 @@ namespace RewindDuel
                     ry += killH;
                 }
             }
+        }
+
+        struct ShotStats { public int shots, hits, heads, damage; }
+        ShotStats[,] rpStats;
+        List<object> rpStatsFor;
+
+        /// Shots, hits, headshots and damage per round and player, counted once from the shot events.
+        /// Damage stays -1 for a match whose shots carry none (the classic rules).
+        ShotStats[,] RoundStats()
+        {
+            if (rpStats != null && rpStatsFor == rpEvents) return rpStats;
+            rpStatsFor = rpEvents;
+            rpStats = new ShotStats[rpRounds.Count, 2];
+            for (int i = 0; i < rpRounds.Count; i++) for (int sl = 0; sl < 2; sl++) rpStats[i, sl].damage = -1;
+            foreach (var e in rpEvents)
+            {
+                if (Json.Str(e, "type") != "shot") continue;
+                int sl = (int)Json.Num(e, "slot", -1);
+                if (sl < 0 || sl > 1) continue;
+                int ri = RoundAt((float)Json.Num(e, "tick"));
+                ref var st = ref rpStats[ri, sl];
+                st.shots++;
+                if (Json.Bool(e, "hit")) st.hits++;
+                if (Json.Bool(e, "head")) st.heads++;
+                double d = Json.Num(e, "damage", -1);
+                if (d >= 0) st.damage = Mathf.Max(0, st.damage) + (int)d;
+            }
+            return rpStats;
         }
 
         // ================================================================ taking control
