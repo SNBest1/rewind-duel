@@ -149,9 +149,11 @@ namespace RewindDuel
 
         int RoundAt(float tick)
         {
+            // The latest round that has started, so the pause after a round still belongs to it.
+            int at = 0;
             for (int i = 0; i < rpRounds.Count; i++)
-                if (tick >= Json.Num(rpRounds[i], "startTick") && tick < Json.Num(rpRounds[i], "endTick")) return i;
-            return Mathf.Max(0, rpRounds.Count - 1);
+                if (tick >= Json.Num(rpRounds[i], "startTick")) at = i;
+            return at;
         }
 
         int[] ScoreAt(float tick)
@@ -176,6 +178,7 @@ namespace RewindDuel
                 if (kb.downArrowKey.wasPressedThisFrame) rpSpeed = Mathf.Max(0.25f, rpSpeed / 2f);
                 if (kb.tabKey.wasPressedThisFrame) { rpFollow = 1 - rpFollow; ColourReplayBots(); }
                 if (kb.vKey.wasPressedThisFrame) CycleCamera();
+                if (kb.mKey.wasPressedThisFrame) rpTacMap = !rpTacMap;
                 if (kb.leftBracketKey.wasPressedThisFrame) JumpRound(-1);
                 if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
@@ -568,6 +571,7 @@ namespace RewindDuel
             DrawBanner(w, h);
 
             DrawRoundList(w, h);
+            DrawTacMap(w, h);
 
             // Bottom: the timeline of the whole match, then the controls.
             float pw = Mathf.Min(1180 * S, w - 40 * S), px = w / 2 - pw / 2, ph = 150 * S, py = h - ph - 18 * S;
@@ -630,7 +634,7 @@ namespace RewindDuel
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
                 "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
         }
