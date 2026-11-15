@@ -1,15 +1,24 @@
-# Rewind
+# Rewind Duel
 
-Rewind lets you jump back into any moment of a round you lost in **Rewind Duel**, a small top-down 1v1 tactical shooter, and replay it against a clone of your real opponent built from their own recorded games. Built for DevHacks 2026 (Riot Games Track 1, Gameplay Bots).
+Rewind Duel is a one-on-one tactical shooter where every round is recorded tick by tick on a deterministic server, so any moment can be replayed, questioned with a coach that plays out a hundred alternative futures, and played again from that exact tick. When you take control, your real opponent is recreated from their own recordings, their habits plus an AI that fights at their rank. Built for DevHacks 2026 (Riot Games Track 1, Gameplay Bots).
 
-**Status:** Phases 1ΓÇô5 are done ΓÇö the playable two-player game with recording and replay, rewind sessions (ghost ΓåÆ clone handoff with a behavior trace), k-nearest-neighbor clones with a circuit breaker, the what-if plan ranker, and the evidence evals. Phase 6 is partly done: a first-person three.js view of any recorded match (`/fpv.html`) with running ripples; the Cloudflare Durable Object migration is deliberately deferred (see `DECISIONS.md` D33). See `spec.md` for the full plan and `DECISIONS.md` for design choices.
+**What is in it:**
+
+- **A 3D client** (Unity, `unity/RewindDuelLive`), also served to browsers as WebGL at `/play/`, and the original 2D client at `/classic`.
+- **The replay**: round list with kills and per-round stats, a whole-match timeline with a zoomed strip of the current round, third-person, first-person, free and overhead cameras, a 2D tactical map, and "What they saw", which shows the rival only while the followed player could see them.
+- **The coach**: at any tick the server forks the match and plays every scripted plan five times against the opponent's recreation, then plays the chosen future in the replay with what really happened left as ghosts.
+- **Take control**: play from any tick. The opponent repeats their real inputs until you change the fight, then becomes the person + AI hybrid (DECISIONS D75). Every attempt is saved and can be watched from the timeline, rebuilt exactly from its inputs.
+- **Evidence**: evals of how well the recreations play like the real people and how they fight (`npm run eval`, `npm run eval:persona`).
+
+`spec.md` is the original plan and `DECISIONS.md` logs every design choice with its tradeoff.
 
 ## Architecture
 
 ```
- browser (web/)                 Node (server/)                     disk (data/)
+ Unity 3D client (unity/) ─┐
+  or browser (web/)        │   Node (server/)                     disk (data/)
 +----------------+  input 32/s +-------------------------------+
-| canvas client  | ----------> | room: MatchRunner             |
+| client         | ----------> | room: MatchRunner             |
 | draws only the |             |   step(state, inputs)  <----- engine/ (pure TS, deterministic)
 | Observation it | <---------- |   observe(state, slot)        |   write on match end
 | is sent        |  obs+events |   input log (changes only)    | ------------------> <id>.json
@@ -21,6 +30,7 @@ Rewind lets you jump back into any moment of a round you lost in **Rewind Duel**
 - **`engine/`** is the whole game as pure functions with no dependencies: `createMatch`, `step`, `observe`, `hashState`, `replayMatch`. It has no clock and no `Math.random`; randomness comes from a seeded mulberry32 whose state lives inside the game state. Same seed plus same inputs gives the same hash, which is what makes rewinding possible at all.
 - **`server/`** owns the clock. It steps the engine 32 times a second, logs every input change with the tick it applied on, and sends each player only `observe(state, slot)`. The enemy position never leaves the server unless that player can see the enemy.
 - **`web/`** sends keys and mouse, and draws what it is told. Fog of war is enforced by the server, the client only shades it. The one thing it computes is a prediction of its own movement, using the engine's `applyMovement` on inputs the server has not acknowledged yet, so your own movement does not wait for the round trip (DECISIONS D16). The prediction is never sent or recorded.
+- **`unity/RewindDuelLive`** is the 3D client: it draws the same observations and replays the server sends, with no game logic of its own (DECISIONS D70), and its WebGL build is what `/play/` serves.
 - **`data/`** holds recorded matches. A match file is a seed plus an input log, a few hundred KB, and replays to the exact final state.
 
 ## Install
@@ -133,8 +143,8 @@ npm run server
 Open `http://localhost:8080/replay.html`. Pick a recorded match, scrub the timeline (kills, plants and round starts are marked), and toggle each player's vision. Then:
 
 - **Take control from here** opens a rewind session on the server. You drive your own slot; the opponent first replays its recorded inputs (ghost), and once your play diverges past the limit it hands off to a clone of the real opponent built from their other games. The circuit breaker drops to a basic bot when the clone hits a situation it has never seen. The behavior-trace panel logs every opponent decision; clicking a `CLONE` line shows the recorded moment(s) it copied.
-- **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, ΓÇª) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
-- **first-person ΓåÆ** opens `/fpv.html`, a three.js first-person view of the same recorded match ΓÇö walls extruded, the camera at one player's eye along their aim, a ripple on the floor whenever a player runs. It renders the 2D snapshots; the simulation stays 2D.
+- **What could I have done?** ranks about twenty scripted micro-plans (stop and shoot, back off to cover, smoke then cross, dash out, …) by running each five times from the fork against the guarded clone, in a worker thread, and shows the top 3 with a one-line reason.
+- **first-person →** opens `/fpv.html`, a three.js first-person view of the same recorded match — walls extruded, the camera at one player's eye along their aim, a ripple on the floor whenever a player runs. It renders the 2D snapshots; the simulation stays 2D.
 
 There is also a **first-person 3D client** for the live game, in `unity/RewindDuelLive` (Unity 6000.6.9f1). It plays every mode against this server and reads maps and weapons from `GET /api/catalog` (DECISIONS D70). Open `Assets/RewindDuel/RewindDuel.unity` and press Play, or build it for the browser:
 
@@ -169,7 +179,7 @@ scripted attempt among real ones.
 npm run eval
 ```
 
-Writes `eval/results.md`. For each player with enough data it holds out one of their matches, builds their clone from the rest, and on the held-out match reports clone accuracy (move + fire match vs the real person), 1-second position error, handoff rate, and a transfer test ΓÇö each for three policies: the player's own clone, the basic bot, and a clone of a different player. Numbers are reported as-is, including weak ones.
+Writes `eval/results.md`. For each player with enough data it holds out one of their matches, builds their clone from the rest, and on the held-out match reports clone accuracy (move + fire match vs the real person), 1-second position error, handoff rate, and a transfer test — each for three policies: the player's own clone, the basic bot, and a clone of a different player. Numbers are reported as-is, including weak ones.
 
 You can also run one what-if from the command line:
 
@@ -251,7 +261,7 @@ Before it has seen you, the AI says where you are going (`CALL calling it: you a
 
 ### AI coach
 
-After a match against the AI or your clone, the result screen reviews your last 3 deaths: from 3 seconds before each, the what-if planner plays 20 plans ├ù 5 seeds and tells you what would have won the fight ("Flash them, then peek: won the fight 5/5"). Click one to watch it. Takes about 10 to 15 seconds in the background.
+After a match against the AI or your clone, the result screen reviews your last 3 deaths: from 3 seconds before each, the what-if planner plays 20 plans × 5 seeds and tells you what would have won the fight ("Flash them, then peek: won the fight 5/5"). Click one to watch it. Takes about 10 to 15 seconds in the background.
 
 Footsteps: running (not walking) within 14 units is heard through walls, as a rough 2 by 2 spot. You see it as blue rings; the AI uses it too.
 
