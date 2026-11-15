@@ -29,6 +29,8 @@ namespace RewindDuel
         void AskCoach()
         {
             if (coachState == "asking" || rpId == null) return;
+            // The planner forks the original recording; an attempt's moves after its fork are not in it.
+            if (rpBranch > 0) { coachState = "error"; coachMsg = "The coach plans from the original match. Go back to it first (Enter)."; return; }
             ClearCoachGhosts();
             coachResult = null;
             coachFrames = null;

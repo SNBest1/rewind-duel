@@ -34,13 +34,13 @@ namespace RewindDuel
         string rpReturnId;
         int rpReturnTick;
 
-        IEnumerator OpenReplay(string id, int startTick = 0)
+        IEnumerator OpenReplay(string id, int startTick = 0, int branch = 0)
         {
             if (rpLoading) yield break;
             rpLoading = true;
             status = "Loading the match…";
             object detail = null;
-            yield return Get("/api/viewer/matches/" + id, o => detail = o, e => status = "Could not load that match: " + e);
+            yield return Get("/api/viewer/matches/" + id + (branch > 0 ? "/branches/" + branch : ""), o => detail = o, e => status = "Could not load that match: " + e);
             rpLoading = false;
             if (detail == null) yield break;
             var m = catalog?.Map(Json.Str(detail, "map"));
@@ -53,6 +53,9 @@ namespace RewindDuel
             rpEvents = Json.Arr(detail, "events") ?? new List<object>();
             rpSmokes = Json.Arr(detail, "smokes") ?? new List<object>();
             rpRounds = Json.Arr(detail, "rounds") ?? new List<object>();
+            rpBranches = Json.Arr(detail, "branches");
+            rpBranch = branch;
+            rpBranchInfo = Json.Obj(detail, "branch");
             rpStep = Mathf.Max(1, (int)Json.Num(detail, "frameStep", 2));
             rpTicks = (int)Json.Num(detail, "ticks");
             var players = Json.Arr(detail, "players");
@@ -66,6 +69,7 @@ namespace RewindDuel
                     rpNames[s] = Json.Str(p, "name") ?? "?";
                     if (string.Equals(rpNames[s], playerName.Trim(), StringComparison.OrdinalIgnoreCase)) rpFollow = s;
                 }
+            if (rpBranchInfo != null) rpFollow = Mathf.Clamp((int)Json.Num(rpBranchInfo, "human"), 0, 1);
             if (rpFrames.Count == 0) { status = "That match has no frames to show."; yield break; }
 
             BuildArena(m);
@@ -186,7 +190,7 @@ namespace RewindDuel
                 if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
                 if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
                 if (kb.periodKey.wasPressedThisFrame) JumpKill(+1);
-                if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) { TakeControl(); return; }
+                if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) { if (rpBranch > 0) BackToOriginal(); else TakeControl(); return; }
                 if (kb.escapeKey.wasPressedThisFrame) { LeaveReplay(); return; }
             }
             if (mouse != null)
@@ -475,7 +479,8 @@ namespace RewindDuel
             float rowH = 34 * S, killH = 26 * S;
             float statH = 22 * S;
             var stats = RoundStats();
-            float ph = Mathf.Min(bottom - y, 34 * S + rpRounds.Count * (rowH + 3 * S) + curKills * killH + 2 * statH + 12 * S);
+            var attempts = AttemptsIn(cur);
+            float ph = Mathf.Min(bottom - y, 34 * S + rpRounds.Count * (rowH + 3 * S) + (curKills + attempts.Count) * killH + 2 * statH + 12 * S);
             var panel = new Rect(x, y, pw, ph);
             Panel(panel, new Color(0.04f, 0.045f, 0.06f, 0.84f));
             Text(new Rect(x + 14 * S, y + 8 * S, pw, 18 * S), "ROUNDS", St(12, true, TextAnchor.UpperLeft, true), Gfx.Label, false);
@@ -533,6 +538,24 @@ namespace RewindDuel
                         rpNames[killer] + "  ›  " + rpNames[victim] + "   " + gun + (Json.Bool(k, "head") ? "  · head" : ""),
                         St(11, true, TextAnchor.MiddleLeft), mine ? new Color(Gfx.Ally.r, Gfx.Ally.g, Gfx.Ally.b, alpha) : new Color(Gfx.Enemy.r, Gfx.Enemy.g, Gfx.Enemy.b, alpha), false);
                     if (ev.type == EventType.MouseDown && ev.button == 0 && kh) { ev.Use(); SeekReplay(kt - KillLead); }
+                    ry += killH;
+                }
+                // Rewinds of this round that were played to the end, each one watchable.
+                foreach (var (n, b) in attempts)
+                {
+                    if (ry + killH > panel.yMax) break;
+                    var ar = new Rect(x + 24 * S, ry, pw - 40 * S, killH);
+                    bool ah = ar.Contains(ev.mousePosition);
+                    bool watching = rpBranch == n;
+                    Fill(ar, watching ? new Color(1, 1, 1, 0.12f) : ah ? new Color(1, 1, 1, 0.07f) : new Color(0, 0, 0, 0));
+                    var ac = AttemptColour(b);
+                    Fill(new Rect(ar.x + 4 * S, ar.y + 9 * S, 8 * S, 8 * S), ac);
+                    // The player's name only when it is not the one being followed, to keep the row short.
+                    int who = Mathf.Clamp((int)Json.Num(b, "human"), 0, 1);
+                    Text(new Rect(ar.x + 18 * S, ar.y, ar.width - 84 * S, ar.height),
+                        "ATTEMPT " + n + (who != me ? " · " + rpNames[who] : "") + " · " + AttemptLabel(b), St(11, true, TextAnchor.MiddleLeft), ac, false);
+                    Text(new Rect(ar.x, ar.y, ar.width - 4 * S, ar.height), watching ? "WATCHING" : "WATCH ›", St(10, true, TextAnchor.MiddleRight, true), new Color(1, 1, 1, watching ? 0.5f : 0.8f), false);
+                    if (ev.type == EventType.MouseDown && ev.button == 0 && ah && !watching) { ev.Use(); WatchAttempt(n); }
                     ry += killH;
                 }
             }
@@ -627,6 +650,7 @@ namespace RewindDuel
             Text(new Rect(w / 2 - 120 * S, by + 28 * S, 240 * S, 20 * S), mapName.ToUpperInvariant() + " · ROUND " + (ri + 1), St(11, true, TextAnchor.MiddleCenter), new Color(1, 1, 1, 0.6f));
 
             DrawBanner(w, h);
+            DrawAttemptBanner(w, by + 64 * S);
 
             if (rpCoachOpen) DrawCoach(w, h);
             else DrawRoundList(w, h);
@@ -634,7 +658,7 @@ namespace RewindDuel
             if (rpFog)
             {
                 bool seen = !RivalHidden(fr);
-                var fl = new Rect(w / 2 - 170 * S, by + 64 * S, 340 * S, 26 * S);
+                var fl = new Rect(w / 2 - 170 * S, by + (rpBranch > 0 ? 94 : 64) * S, 340 * S, 26 * S);
                 Panel(fl, new Color(0.04f, 0.045f, 0.06f, 0.86f));
                 Text(fl, "WHAT " + rpNames[me].ToUpperInvariant() + " SAW  ·  " + (seen ? rpNames[them] + " IN SIGHT" : rpNames[them] + " HIDDEN") + "  ·  F",
                     St(11, true, TextAnchor.MiddleCenter, true), seen ? Gfx.Enemy : new Color(1, 1, 1, 0.6f), false);
@@ -668,6 +692,7 @@ namespace RewindDuel
             }
             foreach (var e in rpEvents)
                 if (Json.Str(e, "type") == "plant") Fill(new Rect(X(Json.Num(e, "tick")) - 3 * S, bar.yMax + 3 * S, 6 * S, 6 * S), Gfx.Gold);
+            DrawAttemptMarks(bar, t => X(t));
             // The playhead.
             float hx = X(rpTick);
             Fill(new Rect(hx - 1.5f * S, bar.y - 12 * S, 3 * S, bar.height + 24 * S), Color.white);
@@ -695,11 +720,13 @@ namespace RewindDuel
             var go = new Rect(px + pw - 340 * S, cy - 6 * S, 320 * S, 46 * S);
             bool hover = go.Contains(ev.mousePosition);
             Panel(go, hover ? new Color(1f, 0.45f, 0.42f) : Gfx.Rec);
-            Text(go, "TAKE CONTROL AS " + rpNames[me].ToUpperInvariant(), St(17, true, TextAnchor.MiddleCenter, true), Color.white, false);
-            if (ev.type == EventType.MouseDown && hover) { ev.Use(); TakeControl(); return; }
+            // In an attempt the fork belongs to the original match, so the button goes back there instead.
+            Text(go, rpBranch > 0 ? "BACK TO THE ORIGINAL MATCH" : "TAKE CONTROL AS " + rpNames[me].ToUpperInvariant(), St(17, true, TextAnchor.MiddleCenter, true), Color.white, false);
+            if (ev.type == EventType.MouseDown && hover) { ev.Use(); if (rpBranch > 0) BackToOriginal(); else TakeControl(); return; }
 
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
-                "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
+                rpBranch > 0 ? "This is a rewind attempt: the match as it really went up to the fork, then what was played from there."
+                : "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
             Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · V camera · M map · F what they saw · C coach · right-drag orbit or look · WASD QE free camera · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);

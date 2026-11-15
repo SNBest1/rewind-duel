@@ -550,6 +550,20 @@ const http = createServer((req, res) => {
     if (!job) return json(res, 404, { error: 'no such job' });
     return json(res, 200, job);
   }
+  // One stored rewind attempt as a replay: the original inputs up to the fork, then the attempt's own.
+  // Rebuilt this way it reaches the attempt's finalHash exactly (both slots are in the attempt's log from the fork on).
+  const bj = /^\/api\/viewer\/matches\/([a-z0-9-]+)\/branches\/(\d+)$/.exec(path);
+  if (req.method === 'GET' && bj) {
+    const file = loadMatch(bj[1]);
+    if (!file) return json(res, 404, { error: 'no such match' });
+    const all = loadBranches(file.id);
+    const n = Number(bj[2]);
+    const b = all[n - 1];
+    if (!b) return json(res, 404, { error: 'no such attempt' });
+    const combined: MatchFile = { ...file, inputs: [...file.inputs.filter((i) => i.tick < b.forkTick), ...b.inputs], ticks: b.ticks };
+    const { inputs, ...meta } = b;
+    return json(res, 200, { ...analyzeMatch(combined, true), branch: { n, ...meta }, branches: all.map(({ inputs: _, ...x }) => x) });
+  }
   const m = /^\/api\/viewer\/matches\/([a-z0-9-]+)$/.exec(path);
   if (req.method === 'GET' && m) {
     const file = loadMatch(m[1]);
