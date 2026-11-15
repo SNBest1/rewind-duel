@@ -126,10 +126,12 @@ export class AiPlayer {
   private tune(): void {
     const s = skillFor(this.difficulty, this.brain);
     this.skill = s;
-    // At the bottom it is genuinely beatable: 600 ms to react, 9 degrees of wobble, slow to track, rarely dodges.
-    // Aim improves on a curve that is steeper at the low end, so Iron vs Bronze is a real difference too.
+    // At the bottom it is genuinely beatable: almost a second to react, 9 degrees of wobble, slow to track, rarely
+    // dodges. Aim improves on a curve that is steeper at the low end, so Iron vs Bronze is a real difference too.
+    // Even the top rank waits 375 ms after first seeing you before it may fire: a human-speed reaction plus the
+    // network round trip, so the player always has a window to react (DECISIONS D73).
     const a = Math.sqrt(s);
-    this.reactTicks = Math.round(20 - 16 * a); // 625 ms down to 125 ms
+    this.reactTicks = Math.round(30 - 18 * a); // 940 ms down to 375 ms
     this.aimErr = ((10 - 9.2 * a) * Math.PI) / 180;
     this.track = 0.12 + 0.7 * a;
     this.dodgeChance = 0.05 + 0.8 * s;
