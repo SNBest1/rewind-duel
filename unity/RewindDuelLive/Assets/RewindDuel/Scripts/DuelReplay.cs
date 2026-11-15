@@ -156,6 +156,10 @@ namespace RewindDuel
                 if (kb.upArrowKey.wasPressedThisFrame) rpSpeed = Mathf.Min(8f, rpSpeed * 2f);
                 if (kb.downArrowKey.wasPressedThisFrame) rpSpeed = Mathf.Max(0.25f, rpSpeed / 2f);
                 if (kb.tabKey.wasPressedThisFrame) { rpFollow = 1 - rpFollow; ColourReplayBots(); }
+                if (kb.leftBracketKey.wasPressedThisFrame) JumpRound(-1);
+                if (kb.rightBracketKey.wasPressedThisFrame) JumpRound(+1);
+                if (kb.commaKey.wasPressedThisFrame) JumpKill(-1);
+                if (kb.periodKey.wasPressedThisFrame) JumpKill(+1);
                 if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) { TakeControl(); return; }
                 if (kb.escapeKey.wasPressedThisFrame) { LeaveReplay(); return; }
             }
@@ -205,9 +209,49 @@ namespace RewindDuel
             float yawDeg = YawFromAim(faim) + rpOrbit;
             var rot = Quaternion.Euler(0, yawDeg, 0);
             var want = target + rot * new Vector3(0.9f, 2.7f * rpZoom, -4.6f * rpZoom);
+            // Keep the camera on the player's side of any wall behind them, so it never sits inside one.
+            float pulled = 0f; // 0 when the camera sits where it wants to, towards 1 as a wall pulls it in
+            var flat = new Vector2(want.x - target.x, -(want.z - target.z));
+            float len = flat.magnitude;
+            if (len > 0.01f)
+            {
+                float hit = WallHit((float)fx0, (float)fy0, flat / len, len);
+                if (hit < len)
+                {
+                    float keep = Mathf.Max(0.35f, hit - 0.35f) / len;
+                    pulled = 1f - keep;
+                    // Pulled in close, it rises, so it looks over the shoulder instead of into the player's back.
+                    want = new Vector3(target.x + (want.x - target.x) * keep, want.y + pulled * 0.7f, target.z + (want.z - target.z) * keep);
+                }
+            }
             rpCam = rpCam == Vector3.zero || (rpCam - want).sqrMagnitude > 100 ? want : Vector3.Lerp(rpCam, want, Chase(0.12f));
-            var look = target + Vector3.up * 1.2f + rot * Vector3.forward * 2.5f;
+            var look = target + Vector3.up * 1.2f + rot * Vector3.forward * (2.5f + pulled * 4f);
             cam.transform.SetPositionAndRotation(rpCam, Quaternion.LookRotation(look - rpCam));
+        }
+
+        /// Distance along a ray (map units) to the first wall it enters, or `max` if none: the slab test per rectangle.
+        float WallHit(float ox, float oy, Vector2 dir, float max)
+        {
+            float best = max;
+            if (map == null) return best;
+            foreach (var w in map.walls)
+            {
+                float t0 = 0f, t1 = best;
+                if (!Slab(ox, dir.x, (float)w.x, (float)(w.x + w.w), ref t0, ref t1)) continue;
+                if (!Slab(oy, dir.y, (float)w.y, (float)(w.y + w.h), ref t0, ref t1)) continue;
+                if (t0 < best) best = t0;
+            }
+            return best;
+        }
+
+        static bool Slab(float o, float d, float lo, float hi, ref float t0, ref float t1)
+        {
+            if (Mathf.Abs(d) < 1e-6f) return o >= lo && o <= hi;
+            float a = (lo - o) / d, b = (hi - o) / d;
+            if (a > b) { var tmp = a; a = b; b = tmp; }
+            t0 = Mathf.Max(t0, a);
+            t1 = Mathf.Min(t1, b);
+            return t0 <= t1;
         }
 
         void ReplayEvent(object e)
@@ -246,6 +290,115 @@ namespace RewindDuel
                 case "roundStart":
                     Banner("ROUND " + (int)Json.Num(e, "round"), "", Gfx.Label, 1.4f);
                     break;
+            }
+        }
+
+        // ================================================================ rounds and kills
+
+        /// Kills are a moment worth seeing build up: jumping to one lands this many ticks before it.
+        int KillLead => 3 * TickRate;
+
+        List<object> Kills()
+        {
+            var list = new List<object>();
+            foreach (var e in rpEvents) if (Json.Str(e, "type") == "kill") list.Add(e);
+            return list;
+        }
+
+        void JumpRound(int dir)
+        {
+            if (rpRounds == null || rpRounds.Count == 0) return;
+            int ri = RoundAt(rpTick);
+            // Going back from inside a round first returns to its start, like a track skip.
+            if (dir < 0 && rpTick - Json.Num(rpRounds[ri], "startTick") > TickRate) { SeekReplay((float)Json.Num(rpRounds[ri], "startTick")); return; }
+            int to = Mathf.Clamp(ri + dir, 0, rpRounds.Count - 1);
+            SeekReplay((float)Json.Num(rpRounds[to], "startTick"));
+        }
+
+        void JumpKill(int dir)
+        {
+            var kills = Kills();
+            if (kills.Count == 0) return;
+            // The kill whose lead-in we are in counts as the current one.
+            float now = rpTick + KillLead;
+            object pick = null;
+            if (dir > 0) { foreach (var k in kills) if (Json.Num(k, "tick") > now + 1) { pick = k; break; } }
+            else for (int i = kills.Count - 1; i >= 0; i--) if (Json.Num(kills[i], "tick") < now - 1) { pick = kills[i]; break; }
+            if (pick != null) SeekReplay((float)Json.Num(pick, "tick") - KillLead);
+        }
+
+        /// The round a kill belongs to. A kill that ends a round lands on its last tick, which RoundAt
+        /// already counts as the next round, so look one tick earlier.
+        int KillRound(object kill) => RoundAt((float)Json.Num(kill, "tick") - 1);
+
+        static string HowRoundEnded(string reason, bool won)
+        {
+            switch (reason)
+            {
+                case "kill": return won ? "eliminated them" : "eliminated";
+                case "time": return "time ran out";
+                case "defuse": return "spike defused";
+                case "detonation": return "spike detonated";
+                default: return "in progress";
+            }
+        }
+
+        /// The right-hand column: every round, and the kills of the one being watched, all clickable.
+        void DrawRoundList(float w, float h)
+        {
+            if (rpRounds == null || rpRounds.Count == 0) return;
+            int me = rpFollow, cur = RoundAt(rpTick);
+            float pw = 320 * S, x = w - pw - 16 * S, y = 88 * S, bottom = h - 230 * S;
+            var kills = Kills();
+            int curKills = 0;
+            foreach (var k in kills) if (KillRound(k) == cur) curKills++;
+            float rowH = 34 * S, killH = 26 * S;
+            float ph = Mathf.Min(bottom - y, 34 * S + rpRounds.Count * (rowH + 3 * S) + curKills * killH + 8 * S);
+            var panel = new Rect(x, y, pw, ph);
+            Panel(panel, new Color(0.04f, 0.045f, 0.06f, 0.84f));
+            Text(new Rect(x + 14 * S, y + 8 * S, pw, 18 * S), "ROUNDS", St(12, true, TextAnchor.UpperLeft, true), Gfx.Label, false);
+            Text(new Rect(x, y + 8 * S, pw - 14 * S, 18 * S), "[ ]  , .", St(10, false, TextAnchor.UpperRight), new Color(1, 1, 1, 0.4f), false);
+            float ry = y + 32 * S;
+            var ev = Event.current;
+            for (int i = 0; i < rpRounds.Count && ry + rowH <= panel.yMax; i++)
+            {
+                var r = rpRounds[i];
+                bool done = !Json.IsNull(r, "winner");
+                bool won = done && (int)Json.Num(r, "winner") == me;
+                var row = new Rect(x + 8 * S, ry, pw - 16 * S, rowH);
+                bool hover = row.Contains(ev.mousePosition);
+                Fill(row, i == cur ? new Color(1, 1, 1, 0.12f) : hover ? new Color(1, 1, 1, 0.07f) : new Color(0, 0, 0, 0));
+                Color c = !done ? new Color(1, 1, 1, 0.4f) : won ? Gfx.Ally : Gfx.Enemy;
+                Fill(new Rect(row.x, row.y + 4 * S, 4 * S, row.height - 8 * S), c);
+                Text(new Rect(row.x + 12 * S, row.y, 30 * S, row.height), (i + 1).ToString(), St(16, true, TextAnchor.MiddleLeft, true), Gfx.Label, false);
+                Text(new Rect(row.x + 40 * S, row.y, 70 * S, row.height), !done ? "—" : won ? "WON" : "LOST", St(12, true, TextAnchor.MiddleLeft, true), c, false);
+                Text(new Rect(row.x + 92 * S, row.y, 150 * S, row.height), HowRoundEnded(Json.Str(r, "reason"), won), St(11, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.7f), false);
+                double len = Json.Num(r, "endTick") - Json.Num(r, "startTick");
+                Text(new Rect(row.x, row.y, row.width - 8 * S, row.height), Clock((float)len), St(11, true, TextAnchor.MiddleRight, true), new Color(1, 1, 1, 0.55f), false);
+                if (ev.type == EventType.MouseDown && ev.button == 0 && hover) { ev.Use(); SeekReplay((float)Json.Num(r, "startTick")); }
+                ry += rowH + 3 * S;
+
+                if (i != cur) continue;
+                // The watched round's kills, each a jump to just before it happened.
+                foreach (var k in kills)
+                {
+                    float kt = (float)Json.Num(k, "tick");
+                    if (KillRound(k) != cur || ry + killH > panel.yMax) continue;
+                    int killer = (int)Json.Num(k, "killer"), victim = (int)Json.Num(k, "victim");
+                    bool mine = killer == me;
+                    var kr = new Rect(x + 24 * S, ry, pw - 40 * S, killH);
+                    bool kh = kr.Contains(ev.mousePosition);
+                    if (kh) Fill(kr, new Color(1, 1, 1, 0.07f));
+                    bool past = rpTick >= kt;
+                    float alpha = past ? 1f : 0.55f;
+                    string gun = catalog?.WeaponName((int)Json.Num(k, "weapon", 0)) ?? "";
+                    Text(new Rect(kr.x + 4 * S, kr.y, 50 * S, kr.height), Clock(kt - (float)Json.Num(rpRounds[cur], "startTick")), St(10, true, TextAnchor.MiddleLeft, true), new Color(1, 1, 1, 0.5f * alpha), false);
+                    Text(new Rect(kr.x + 46 * S, kr.y, kr.width - 46 * S, kr.height),
+                        rpNames[killer] + "  ›  " + rpNames[victim] + "   " + gun + (Json.Bool(k, "head") ? "  · head" : ""),
+                        St(11, true, TextAnchor.MiddleLeft), mine ? new Color(Gfx.Ally.r, Gfx.Ally.g, Gfx.Ally.b, alpha) : new Color(Gfx.Enemy.r, Gfx.Enemy.g, Gfx.Enemy.b, alpha), false);
+                    if (ev.type == EventType.MouseDown && ev.button == 0 && kh) { ev.Use(); SeekReplay(kt - KillLead); }
+                    ry += killH;
+                }
             }
         }
 
@@ -311,6 +464,8 @@ namespace RewindDuel
 
             DrawBanner(w, h);
 
+            DrawRoundList(w, h);
+
             // Bottom: the timeline of the whole match, then the controls.
             float pw = Mathf.Min(1180 * S, w - 40 * S), px = w / 2 - pw / 2, ph = 150 * S, py = h - ph - 18 * S;
             Panel(new Rect(px, py, pw, ph), new Color(0.04f, 0.045f, 0.06f, 0.86f));
@@ -370,7 +525,7 @@ namespace RewindDuel
             Text(new Rect(px, py - 46 * S, pw, 40 * S),
                 "Take control and you play from this exact moment. " + rpNames[them] + " repeats what really happened until you change it, then the AI takes over.",
                 St(13, false, TextAnchor.LowerCenter, false, true), new Color(1, 1, 1, 0.85f));
-            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · Tab switch player · right-drag orbit · scroll zoom · Enter take control · Esc lobby",
+            Text(new Rect(16 * S, h - 22 * S, w - 32 * S, 18 * S), "Space play/pause · ← → 3 s · ↑ ↓ speed · [ ] round · , . kill · Tab switch player · right-drag orbit · scroll zoom · Enter take control · Esc lobby",
                 St(10, false, TextAnchor.MiddleLeft), new Color(1, 1, 1, 0.45f), false);
             if (!string.IsNullOrEmpty(status)) Text(new Rect(0, py - 72 * S, w, 22 * S), status, St(13, true, TextAnchor.MiddleCenter), Gfx.Rec);
         }
